@@ -242,7 +242,8 @@ def run_grade(directory, rubric_path, out_csv, timeout_s=None, memory_mb=None):
     files_by_roll = {}
     for path in discover(directory):
         fname = os.path.basename(path)
-        roll = extract_roll(fname)
+        stem = os.path.splitext(fname)[0]
+        roll = extract_roll(fname) or re.split(r"[_\-\s]+", stem.strip())[0].upper()
         with open(path, encoding="utf-8-sig", errors="replace") as fh:
             src = fh.read()
         files_by_roll.setdefault(roll, []).append((fname, path, src))

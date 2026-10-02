@@ -7,13 +7,10 @@ ROLL_RE = re.compile(r"bscs(\d{3,7})", re.IGNORECASE)
 
 
 def extract_roll(filename):
-    """'bscs25134_ai_lab02.py' -> 'BSCS25134'; falls back to name token."""
+    """'bscs25134_ai_lab02.py' -> 'BSCS25134'; None when no roll pattern is
+    present (callers decide their own fallback, e.g. LMS folder names)."""
     m = ROLL_RE.search(filename)
-    if m:
-        return "BSCS" + m.group(1).upper()
-    base = os.path.splitext(filename)[0]
-    tok = re.split(r"[_\-\s]+", base.strip())[0]
-    return (tok or base).upper()
+    return "BSCS" + m.group(1).upper() if m else None
 
 
 def discover(directory, extra_excludes=()):
@@ -40,5 +37,7 @@ def load_sources(directory, extra_excludes=()):
         with open(path, encoding="utf-8-sig", errors="replace") as fh:
             src = fh.read()
         fname = os.path.basename(path)
-        results.append((path, extract_roll(fname), fname, src))
+        stem = os.path.splitext(fname)[0]
+        roll = extract_roll(fname) or re.split(r"[_\-\s]+", stem.strip())[0].upper()
+        results.append((path, roll, fname, src))
     return results

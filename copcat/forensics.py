@@ -17,12 +17,15 @@ DRIVE_FILE_RE = re.compile(
 GENERATOR_RE = re.compile(r"Automatically\s+generated\s+by\s+([A-Za-z0-9_ ]+)", re.IGNORECASE)
 IPYTHON_RE = re.compile(r"\b(?:from\s+IPython|import\s+IPython|get_ipython\s*\()")
 NOTEBOOK_FILE_RE = re.compile(r"\.(ipynb)\b", re.IGNORECASE)
+# Colab ipynb metadata stores provenance as a bare notebookId (no URL)
+NOTEBOOK_ID_RE = re.compile(r'"notebookId"\s*:\s*"([A-Za-z0-9_-]{10,})"')
 
 
 def scan_source(source):
     """Provenance artifacts found in one submission's source text."""
     return {
-        "colab_ids": sorted(set(COLAB_RE.findall(source))),
+        "colab_ids": sorted(set(COLAB_RE.findall(source))
+                            | set(NOTEBOOK_ID_RE.findall(source))),
         "drive_ids": sorted(set(DRIVE_FILE_RE.findall(source))),
         "generator": (GENERATOR_RE.search(source).group(1).strip()
                       if GENERATOR_RE.search(source) else None),
@@ -31,16 +34,19 @@ def scan_source(source):
     }
 
 
-def build_forensics(subs):
+def build_forensics(subs, metadata_blobs=None):
     """Scan all submissions; return (per_roll_info, collisions).
 
+    metadata_blobs: {identifier: raw notebook JSON} - scanned in addition to
+    the code, because Colab stores provenance in notebook metadata.
     collisions: list of (artifact_type, artifact_id, [rolls...]) where the
     same notebook/drive ID appears in more than one submission.
     """
     per_roll = {}
     owners = defaultdict(set)   # ("colab", id) -> {rolls}
+    metadata_blobs = metadata_blobs or {}
     for s in subs:
-        info = scan_source(s.source)
+        info = scan_source(s.source + "\n" + metadata_blobs.get(s.roll, ""))
         per_roll[s.roll] = info
         for nid in info["colab_ids"]:
             owners[("colab-notebook", nid)].add(s.roll)

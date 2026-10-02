@@ -14,18 +14,42 @@ from .forensics import build_forensics, apply_forensics_to_pairs
 from . import report as report_mod
 
 
+def _load_submissions(directory, cfg):
+    """Universal ingestion: folder, LMS zip, or notebook - via copcat.loader
+    when given a zip, classic discovery otherwise.
+
+    Returns (submissions, metadata_blobs) where metadata_blobs maps
+    identifier -> raw notebook JSON (forensics scans it for Colab IDs that
+    live in notebook metadata rather than code)."""
+    from .loader import collect
+    from .models import Submission
+
+    if os.path.isdir(directory):
+        rows = load_sources(directory)
+        subs = [build_submission(roll, fname, path, src, cfg)
+                for path, roll, fname, src in rows]
+        return subs, {}
+
+    entries = collect(directory)
+    subs, blobs = [], {}
+    for _root, ident, kind, fname, src, blob in entries:
+        subs.append(build_submission(ident, fname, "", src, cfg))
+        sub = subs[-1]
+        sub.notes.append("identity: {} ({})".format(ident, kind))
+        if blob:
+            blobs[ident] = blob
+    return subs, blobs
+
+
 def run_audit(directory, cfg, out_dir, workers=1):
     started = time.time()
     os.makedirs(out_dir, exist_ok=True)
 
-    rows = load_sources(directory)
-    if not rows:
-        print("No .py submissions found in {}".format(directory))
+    subs, metadata_blobs = _load_submissions(directory, cfg)
+    if not subs:
+        print("No submissions found in {} (expected .py/.ipynb files or an "
+              "LMS .zip)".format(directory))
         return []
-
-    subs = []
-    for path, roll, fname, src in rows:
-        subs.append(build_submission(roll, fname, path, src, cfg))
 
     # starter/base-code subtraction
     if cfg.starters:
@@ -51,7 +75,8 @@ def run_audit(directory, cfg, out_dir, workers=1):
     pairs = apply_evasion_rule(pairs, subs, cfg)
 
     # forensics: shared notebook/drive IDs are definitive regardless of metrics
-    forensics, collisions = build_forensics(subs)
+    forensics, collisions = build_forensics(subs,
+                                            metadata_blobs=metadata_blobs)
     if collisions:
         pairs = apply_forensics_to_pairs(pairs, collisions)
         pairs.sort(key=lambda r: r.blended, reverse=True)
