@@ -26,6 +26,9 @@ def build_parser():
     a.add_argument("--sus", type=float, default=0.60, help="suspicious threshold")
     a.add_argument("--high", type=float, default=0.80, help="high-probability threshold")
     a.add_argument("--min-lines", type=int, default=15, dest="min_lines")
+    a.add_argument("--workers", type=int, default=0,
+                   help="parallel workers for pairwise comparison "
+                        "(0 = auto: one per CPU core; 1 = single process)")
     a.add_argument("--out", default="reports", help="output directory")
 
     g = sub.add_parser("grade", help="grade against a YAML rubric (M4)")
@@ -55,7 +58,10 @@ def main(argv=None):
     )
     directory = os.path.abspath(args.directory)
     out_dir = os.path.abspath(args.out)
-    run_audit(directory, cfg, out_dir)
+    workers = args.workers
+    if workers <= 0:
+        workers = os.cpu_count() or 1
+    run_audit(directory, cfg, out_dir, workers=workers)
 
 
 if __name__ == "__main__":

@@ -88,8 +88,8 @@ def compare_pair(a, b, cfg):
     )
 
 
-def compare_all(subs, cfg):
-    results = []
+def compare_all(subs, cfg, workers=1):
+    jobs = []
     n = len(subs)
     for i in range(n):
         for j in range(i + 1, n):
@@ -97,6 +97,21 @@ def compare_all(subs, cfg):
             if (len(a.effective_lines) < cfg.min_lines
                     or len(b.effective_lines) < cfg.min_lines):
                 continue
-            results.append(compare_pair(a, b, cfg))
+            jobs.append((a, b))
+
+    if workers and workers > 1 and len(jobs) > 64:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=workers) as ex:
+            results = list(ex.map(_compare_job,
+                                  [(a, b, cfg) for a, b in jobs]))
+    else:
+        results = [compare_pair(a, b, cfg) for a, b in jobs]
+
     results.sort(key=lambda r: r.blended, reverse=True)
     return results
+
+
+def _compare_job(args):
+    """Top-level worker so ProcessPoolExecutor can pickle it (Windows spawn)."""
+    a, b, cfg = args
+    return compare_pair(a, b, cfg)

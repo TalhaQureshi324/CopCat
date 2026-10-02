@@ -10,10 +10,11 @@ from .channels import (build_submission, build_starter_profile,
                        subtract_starter, apply_batch_damper)
 from .compare import compare_all
 from .cluster import clusters_from_pairs
+from .forensics import build_forensics, apply_forensics_to_pairs
 from . import report as report_mod
 
 
-def run_audit(directory, cfg, out_dir, top=25):
+def run_audit(directory, cfg, out_dir, workers=1):
     started = time.time()
     os.makedirs(out_dir, exist_ok=True)
 
@@ -46,14 +47,21 @@ def run_audit(directory, cfg, out_dir, top=25):
     # batch-common damper: strip fingerprints present in >=30% of the batch
     damped = apply_batch_damper(subs, cfg)
 
-    pairs = compare_all(subs, cfg)
+    pairs = compare_all(subs, cfg, workers=workers)
+
+    # forensics: shared notebook/drive IDs are definitive regardless of metrics
+    forensics, collisions = build_forensics(subs)
+    if collisions:
+        pairs = apply_forensics_to_pairs(pairs, collisions)
+        pairs.sort(key=lambda r: r.blended, reverse=True)
     clusters = clusters_from_pairs(pairs, cfg.suspicious)
 
     csv_path = os.path.join(out_dir, "copcat_audit.csv")
     txt_path = os.path.join(out_dir, "copcat_audit.txt")
     report_mod.write_csv(csv_path, pairs)
     report_mod.write_txt(txt_path, subs, pairs, clusters, cfg, started,
-                         damped=damped)
+                         damped=damped, forensics=forensics,
+                         collisions=collisions)
 
     n_susp = sum(1 for p in pairs if p.flag == "SUSPICIOUS")
     n_high = sum(1 for p in pairs if p.flag == "HIGH_PROBABILITY_PLAGIARISM")
