@@ -90,6 +90,14 @@ def run_audit(directory, cfg, out_dir, workers=1):
                          damped=damped, forensics=forensics,
                          collisions=collisions)
     try:
+        from .dossier import generate_dossiers
+        dossiers = generate_dossiers(out_dir, subs, pairs, cfg)
+        if dossiers:
+            print("Wrote {} evidence dossier(s) in {}".format(
+                len(dossiers), os.path.join(out_dir, "dossiers")))
+    except Exception as exc:
+        print("Dossier generation skipped: {}".format(exc))
+    try:
         from .webreport import write_html_report
         write_html_report(html_path, subs, pairs, clusters, cfg,
                           forensics=forensics, collisions=collisions)
