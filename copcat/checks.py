@@ -195,23 +195,38 @@ def _code_only(src):
     return "\n".join(code_lines)
 
 
+def _alias_pattern(pattern, aliases):
+    """Make a regex alias-aware: occurrences of a required interface name
+    also match the student's bound name (`except InventoryError` must match
+    a renamed `except StockError`)."""
+    if not aliases:
+        return pattern
+    for required, student in aliases.items():
+        pattern = re.sub(r"\b%s\b" % re.escape(required),
+                         "(?:%s|%s)" % (re.escape(required), re.escape(student)),
+                         pattern)
+    return pattern
+
+
 @check("forbidden_pattern")
 def _forbidden_pattern(tree, src, p):
     seg = _scoped_source(tree, src, p.get("scope", "file"))
     if not p.get("include_comments"):
         seg = _code_only(seg)
-    hits = re.search(p["pattern"], seg)
+    pattern = _alias_pattern(p["pattern"], p.get("aliases") or {})
+    hits = re.search(pattern, seg)
     if hits:
-        return False, p.get("fail", "forbidden pattern '{}' found in scope '{}'".format(
-            p["pattern"], p.get("scope", "file")))
+        return False, p.get("fail", "forbidden pattern found in scope '{}'".format(
+            p.get("scope", "file")))
     return True, "clean"
 
 
 @check("regex_present")
 def _regex_present(tree, src, p):
     blob = src if p.get("include_comments") else _code_only(src)
-    if re.search(p["pattern"], blob):
-        return True, p.get("pass_detail", "pattern '{}' present".format(p["pattern"]))
+    pattern = _alias_pattern(p["pattern"], p.get("aliases") or {})
+    if re.search(pattern, blob):
+        return True, p.get("pass_detail", "pattern present")
     return False, p.get("fail", "pattern '{}' not found".format(p["pattern"]))
 
 
@@ -220,7 +235,8 @@ def _comment_regex_present(tree, src, p):
     from .lexing import lex
     _t, comments, _s, _c, _ok = lex(src)
     blob = "\n".join(t for _, t in comments)
-    if re.search(p["pattern"], blob, re.IGNORECASE if p.get("ignorecase", True) else 0):
+    pattern = _alias_pattern(p["pattern"], p.get("aliases") or {})
+    if re.search(pattern, blob, re.IGNORECASE if p.get("ignorecase", True) else 0):
         return True, "comment/demo mentioning '{}' found".format(p.get("label", p["pattern"]))
     return False, p.get("fail", "no comment demonstrates this requirement")
 

@@ -66,7 +66,7 @@ tasks:
   - id: T5            # Shape Processor (2.0)
     weight: 2.0
     checks:
-      - { id: t5_abc,    type: base_class,     name: Shape, base: ABC, deduct: 0.5 }
+      - { id: t5_abc,    type: base_class,     class: Shape, base: ABC, deduct: 0.5 }
       - { id: t5_abs_a,  type: has_decorator,  class: Shape, method: area, decorator: abstractmethod, deduct: 0.25 }
       - { id: t5_abs_p,  type: has_decorator,  class: Shape, method: perimeter, decorator: abstractmethod, deduct: 0.25 }
       - { id: t5_circle, type: exists_class,   name: Circle, deduct: 0.1 }
@@ -77,6 +77,9 @@ tasks:
       - { id: t5_total,  type: regex_present,  pattern: "def\\s+total_area", deduct: 0.2 }
       - { id: t5_eff,    type: regex_present,  pattern: "def\\s+most_eff|def\\s+eff", deduct: 0.2 }
       - { id: t5_demo,   type: comment_regex_present, pattern: "typeerror|abstract", label: "TypeError demo", deduct: 0.2 }
+      - { id: t5_c_area, type: exists_method, class: Circle, method: area, deduct: 0.1 }
+      - { id: t5_r_area, type: exists_method, class: Rectangle, method: area, deduct: 0.1 }
+      - { id: t5_t_area, type: exists_method, class: Triangle, method: area, deduct: 0.1 }
 
   - id: T6            # Inventory System (2.0)
     weight: 2.0
@@ -92,5 +95,5 @@ tasks:
           fail: "no reorder-level / low-stock logic found" }
       - { id: t6_catch,  type: regex_present, pattern: "except\\s+InventoryError", deduct: 0.4,
           fail: "driver does not catch InventoryError polymorphically" }
-      - { id: t6_demo,   type: regex_present, pattern: "remove_stock\\(\\s*-", deduct: 0.2,
+      - { id: t6_demo,   type: regex_present, pattern: "remove_stock\\s*\\(\\s*-", deduct: 0.2,
           fail: "driver never tests an invalid (<=0) quantity" }

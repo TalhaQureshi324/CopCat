@@ -25,6 +25,7 @@ Check categories:
   "raises_any" | "raises:<Name>" | "ok"
 """
 
+import ast
 import os
 import re
 
@@ -135,14 +136,286 @@ def _eval_probe(check, probe_result):
     return True, "ok"
 
 
+def _required_interface(rubric):
+    """{class: {"methods": set, "attrs": set}} expected by the rubric."""
+    req = {}
+    for task in rubric["tasks"]:
+        for chk in task.get("checks", []):
+            cls = chk.get("class")
+            if not cls and chk["type"] == "exists_class":
+                cls = chk.get("name")      # exists_class uses name:
+            if not cls:
+                continue
+            entry = req.setdefault(cls, {"methods": set(), "attrs": set()})
+            if chk["type"] in ("exists_method", "calls_super"):
+                entry["methods"].add(chk["method"])
+            elif chk["type"] == "has_decorator" and chk.get("method"):
+                entry["methods"].add(chk["method"])
+            elif chk["type"] == "has_attrs":
+                entry["attrs"].update(chk.get("attrs", []))
+
+    # functional probes: construct's leading identifier = required class;
+    # operators/functions in the call imply the dunders it must implement
+    for task in rubric["tasks"]:
+        for chk in task.get("checks", []):
+            if "construct" not in chk:
+                continue
+            construct = chk["construct"]
+            if isinstance(construct, list):
+                construct = construct[0] if construct else ""
+            m = re.match(r"^\s*([A-Za-z_]\w*)\s*\(", construct or "")
+            if not m:
+                continue
+            entry = req.setdefault(m.group(1),
+                                   {"methods": set(), "attrs": set()})
+            call = chk.get("call", "") or ""
+            # strip string literals and numeric literals (incl. negatives)
+            # so `withdraw(-5)` is not mistaken for `a - b`
+            clean = re.sub(r"'[^']*'|\"[^\"]*\"", " ", call)
+            clean = re.sub(r"(?<![\w.])-?\d+(?:\.\d+)?", " ", clean)
+            tokens = set(re.findall(r"==|[+\-*/%]", clean))
+            if "+" in tokens:
+                entry["methods"].add("__add__")
+            if "-" in tokens:
+                entry["methods"].add("__sub__")
+            if "*" in tokens:
+                entry["methods"].add("__mul__")
+            if "%" in tokens:
+                entry["methods"].add("__mod__")
+            if "==" in tokens:
+                entry["methods"].add("__eq__")
+            for fn, dunder in (("abs(", "__abs__"), ("str(", "__str__"),
+                               ("len(", "__len__")):
+                if fn in call:
+                    entry["methods"].add(dunder)
+    return req
+
+
+def _class_structures(tree):
+    import ast
+    out = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            methods = set()
+            super_methods = set()
+            attrs = set()
+            for item in node.body:
+                if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                methods.add(item.name)
+                for sub in ast.walk(item):
+                    if (isinstance(sub, ast.Call)
+                            and isinstance(sub.func, ast.Attribute)
+                            and isinstance(sub.func.value, ast.Call)
+                            and isinstance(sub.func.value.func, ast.Name)
+                            and sub.func.value.func.id == "super"):
+                        super_methods.add(item.name)
+            for n in ast.walk(node):
+                if (isinstance(n, ast.Attribute)
+                        and isinstance(n.value, ast.Name)
+                        and n.value.id in ("self", "cls")):
+                    attrs.add(n.attr)
+            out[node.name] = {"methods": methods, "attrs": attrs,
+                              "super_methods": super_methods}
+    return out
+
+
+def _expected_children(rubric):
+    """{parent_class: set(child_class)} from base_class checks."""
+    out = {}
+    for task in rubric["tasks"]:
+        for chk in task.get("checks", []):
+            if chk["type"] == "base_class" and chk.get("base"):
+                out.setdefault(chk["base"], set()).add(chk["class"])
+    return out
+
+
+def resolve_class_aliases(tree, rubric):
+    """Structural interface binding: if a rubric-required class is missing by
+    name, find the student's class that implements it.
+
+    Binding signals, in order:
+    1. method/attribute overlap with the rubric's expectations for that
+       class (>= structural_threshold), greedy with unique assignment;
+       abstract-base requirements prefer subclassed candidates
+    2. base-relation propagation: base_class checks say X inherits Y — once
+       X is bound, the student class X-bound inherits under its real base
+       name, which binds Y; and a parent with the expected number of
+       student subclasses binds directly
+
+    Returns (aliases, bindings): aliases maps required-name -> student-name.
+    """
+    import ast
+    settings = rubric.get("settings", {})
+    threshold = float(settings.get("structural_threshold", 0.8))
+    req = _required_interface(rubric)
+    children = _expected_children(rubric)
+    structures = _class_structures(tree)
+    subclasses = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                name = getattr(base, "id", None) or getattr(base, "attr", None)
+                if name:
+                    subclasses.setdefault(name, []).append(node.name)
+
+    aliases = {}          # required -> student
+    used_students = set(structures) & set()  # (placeholder; tracked below)
+    used_students = set()
+    bindings = []
+
+    def subclass_count(student_name):
+        return len(subclasses.get(student_name, []))
+
+    # ---- phase 1: structural evidence ------------------------------------
+    triples = []
+    for required in sorted(req):
+        if required in structures:
+            continue
+        need_m, need_a = req[required]["methods"], req[required]["attrs"]
+        super_expect = {m for t in rubric["tasks"] for c in t.get("checks", [])
+                        if c.get("class") == required
+                        and c["type"] == "calls_super"
+                        for m in [c.get("method")]}
+        is_parent = required in children
+        need = len(need_m) + len(need_a)
+        if need == 0:
+            continue
+        abstract = any(
+            c.get("decorator") == "abstractmethod"
+            for t in rubric["tasks"] for c in t.get("checks", [])
+            if c.get("class") == required)
+        for cand, st in structures.items():
+            if cand in req:
+                continue
+            hits = len(st["methods"] & need_m) + len(st["attrs"] & need_a)
+            score = hits / need
+            if score < threshold:
+                continue
+            # super-call evidence: a required super() in an overridden method
+            # must exist in the candidate
+            if super_expect and not (st["super_methods"] & super_expect):
+                continue
+            # tie-breaks: abstract bases and hierarchy parents should map to
+            # subclassed candidates; leaf requirements to unsubclassed ones
+            sub_pref = subclass_count(cand)
+            tie = -sub_pref if (abstract or is_parent) else sub_pref
+            # requirements carrying a super() expectation are the most
+            # constrained — assign them before looser ones steal candidates
+            constrained = 0 if super_expect else 1
+            triples.append((score, constrained, tie, -len(st["methods"]),
+                            required, cand))
+    triples.sort(key=lambda t: (-t[0], t[1], t[2], t[3], t[4], t[5]))
+    for score, _con, _tie, _nm, required, cand in triples:
+        if required in aliases or cand in used_students:
+            continue
+        aliases[required] = cand
+        used_students.add(cand)
+        bindings.append((required, cand, score))
+
+    # ---- phase 1.5: parent count-signature -------------------------------
+    # a required parent whose expected children all lack independent
+    # evidence still binds if exactly n student subclasses exist
+    for parent_req, child_reqs in children.items():
+        if parent_req in aliases or parent_req in structures:
+            continue
+        # children already present by name need no binding at all
+        unbound_children = [c for c in sorted(child_reqs)
+                            if c not in aliases and c not in structures]
+        if not unbound_children:
+            continue
+        matches = [name for name, n in subclasses.items()
+                   if len(n) == len(unbound_children)
+                   and name not in used_students
+                   and name not in aliases.values()
+                   and name != parent_req]
+        if len(matches) == 1:
+            aliases[parent_req] = matches[0]
+            used_students.add(matches[0])
+            bindings.append((parent_req, matches[0], 1.0))
+
+    # ---- phase 2: base-relation propagation ------------------------------
+    changed = True
+    while changed:
+        changed = False
+        for parent_req, child_reqs in children.items():
+            # (a) child bound -> its student base name binds the parent
+            for child_req in child_reqs:
+                if child_req in aliases and parent_req not in aliases \
+                        and parent_req not in structures:
+                    child_student = aliases[child_req]
+                    for node in ast.walk(tree):
+                        if (isinstance(node, ast.ClassDef)
+                                and node.name == child_student
+                                and node.bases):
+                            base_name = (getattr(node.bases[0], "id", None)
+                                         or getattr(node.bases[0], "attr", ""))
+                            if (base_name not in used_students
+                                    and base_name not in req
+                                    and base_name in structures):
+                                aliases[parent_req] = base_name
+                                used_students.add(base_name)
+                                bindings.append((parent_req, base_name, 1.0))
+                                changed = True
+                                break
+            # (b) parent bound -> unbound required children bind to the
+            #     student subclasses of the parent's student name
+            parent_student = aliases.get(parent_req)
+            if parent_student:
+                kids = [c for c in subclasses.get(parent_student, [])
+                        if c not in used_students and c not in aliases.values()
+                        and c not in structures]
+                for child_req in sorted(child_reqs):
+                    if child_req in aliases or not kids:
+                        continue
+                    cand = kids.pop(0)
+                    aliases[child_req] = cand
+                    used_students.add(cand)
+                    bindings.append((child_req, cand, 1.0))
+                    changed = True
+
+    return aliases, bindings
+
+
+class _AliasTransformer(ast.NodeTransformer):
+    """Rewrite the tree so required interface names point at the student's
+    bound classes (ClassDef names and every reference)."""
+
+    def __init__(self, required_to_student):
+        self.mapping = required_to_student
+
+    def visit_ClassDef(self, node):
+        self.generic_visit(node)
+        if node.name in self.mapping:
+            node.name = self.mapping[node.name]
+        return node
+
+    def visit_Name(self, node):
+        if node.id in self.mapping:
+            node.id = self.mapping[node.id]
+        return node
+
+
 def grade_submission(path, src, rubric):
     """Returns {task_scores: {id: score}, failed: [(task_id, deduct, detail)],
-    penalties: [(amount, reason)], final: float, crash: str|None}."""
+    penalties: [(amount, reason)], final: float, crash: str|None,
+    aliases: {required: student}}."""
     settings = rubric.get("settings", {})
     timeout_s = float(settings.get("timeout_s", 15))
     memory_mb = int(settings.get("memory_mb", 512))
+    naming_deduct = float(settings.get("naming_deduct", 0.1))
 
     tree, _ok, _failed = parse_lenient(src)
+
+    # ---- structural interface binding (rename tolerance) -----------------
+    aliases, bindings = {}, []
+    sandbox_aliases = {}
+    if tree is not None:
+        aliases, bindings = resolve_class_aliases(tree, rubric)
+        if aliases:
+            # transformer speaks student-name -> required-name
+            tree = _AliasTransformer({s: r for r, s in aliases.items()}).visit(tree)
+            sandbox_aliases = dict(aliases)   # worker: ns[req] = ns[student]
 
     # ---- one sandbox run carrying every dynamic/functional probe ---------
     probes, dynamic_checks = [], []
@@ -157,7 +430,8 @@ def grade_submission(path, src, rubric):
     run_result = {"crash": None, "stdout_tail": "", "duration_ms": 0,
                   "probes": {}}
     if dynamic_checks:
-        run_result = run_sandboxed(path, probes, timeout_s, memory_mb)
+        run_result = run_sandboxed(path, probes, timeout_s, memory_mb,
+                                   aliases=sandbox_aliases)
 
     # ---- evaluate every check -------------------------------------------
     failed = []          # (task_id, deduct, detail)
@@ -166,6 +440,9 @@ def grade_submission(path, src, rubric):
             ctype = chk["type"]
             deduct = float(chk.get("deduct", 0))
             try:
+                if aliases and ctype in ("regex_present", "forbidden_pattern",
+                                         "comment_regex_present"):
+                    chk = {**chk, "aliases": aliases}
                 if ctype in _STATIC_TYPES:
                     passed, detail = get_check(ctype)(tree, src, chk)
                 elif ctype in _DYNAMIC_TYPES:
@@ -180,6 +457,19 @@ def grade_submission(path, src, rubric):
                 detail = chk.get("fail", detail)
                 failed.append((task["id"], deduct, detail))
 
+    # naming-convention deduction for each structurally bound class: the
+    # logic earns its marks, the non-standard name costs a small, explicit
+    # amount instead of wiping out the task
+    for required, candidate, score in bindings:
+        task_id = next((t["id"] for t in rubric["tasks"]
+                        for c in t.get("checks", [])
+                        if c.get("class") == required),
+                       rubric["tasks"][0]["id"])
+        failed.append((task_id, naming_deduct,
+                       "class '{}' accepted for '{}' (structural match "
+                       "{:.0%}); non-standard naming".format(
+                           candidate, required, score)))
+
     task_scores = {t["id"]: t["weight"] for t in rubric["tasks"]}
     for task_id, deduct, _d in failed:
         task_scores[task_id] = max(0.0, task_scores.get(task_id, 0.0) - deduct)
@@ -189,6 +479,7 @@ def grade_submission(path, src, rubric):
         "failed": failed,
         "final": sum(task_scores.values()),
         "crash": run_result["crash"],
+        "aliases": aliases,
     }
 
 
@@ -224,6 +515,7 @@ def grade_batch(files_by_roll, rubric):
             "final": final,
             "report": "; ".join(report_bits) or "None",
             "other_files": [f for f, _p, _s in entries[1:]],
+            "aliases": best.get("aliases", {}),
         })
     return rows
 

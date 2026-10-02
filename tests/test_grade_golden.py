@@ -39,6 +39,22 @@ def test_commented_out_file_scores_zero(grade_rows):
     assert grade_rows["G05"]["final"] <= 1.0
 
 
+def test_renamed_classes_get_structural_binding_not_zero(grade_rows):
+    """G10 = G06's logic with every mandated class renamed. Structural
+    binding must recover the logic marks and apply only small naming
+    deductions - not wipe the submission to zero."""
+    row = grade_rows["G10"]
+    assert 7.5 <= row["final"] <= 9.5, "final: {}".format(row["final"])
+    assert any("structural match" in bit or "non-standard naming" in bit
+               for bit in row["report"].split("; "))
+    assert len(row.get("aliases", {})) >= 10
+
+
+def test_standard_naming_outranks_renamed_naming(grade_rows):
+    # identical logic: the standard-named file must still score higher
+    assert grade_rows["G06"]["final"] > grade_rows["G10"]["final"]
+
+
 def test_gradebook_csv_written(tmp_path_factory):
     # grade a tiny fresh batch to prove the CSV artifact is parseable
     tmp = tmp_path_factory.mktemp("csv")

@@ -52,6 +52,11 @@ def main():
     # salvage: classes/functions defined before a crash still support probes
     if mod is not None:
         mod_ns = {k: v for k, v in vars(mod).items() if k != "__builtins__"}
+    # structural interface binding: expose the student's class under the
+    # rubric-required name so probes can construct it
+    for required, student in (spec.get("aliases") or {}).items():
+        if student in mod_ns:
+            mod_ns[required] = mod_ns[student]
     result["duration_ms"] = int((time.perf_counter() - t0) * 1000)
     result["stdout_tail"] = buf.getvalue()[-4000:]
 
