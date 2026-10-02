@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CopCat - lab integrity &amp; grading dashboard</title>
+<style>
+:root { --bg:#f5f6fa; --ink:#1e272e; --line:#dcdde1; --accent:#2980b9;
+        --bad:#c0392b; --warn:#e67e22; --good:#27ae60; }
+* { box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+header { background:#1e272e; color:#fff; padding:16px 28px; }
+header h1 { margin:0; font-size:20px; }
+header .sub { color:#9aa4ad; font-size:12px; margin-top:3px; }
+main { max-width:1240px; margin:0 auto; padding:22px; }
+.card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 20px; margin-bottom:18px; }
+h2 { font-size:15px; margin:0 0 12px; color:#2c3e50; text-transform:uppercase; letter-spacing:.4px; }
+.drop { border:2px dashed var(--accent); border-radius:8px; padding:26px; text-align:center; color:#57606f; cursor:pointer; }
+.drop.over { background:#eaf4fd; }
+.row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+button { background:var(--accent); border:none; color:#fff; padding:9px 18px; border-radius:5px; font-size:14px; cursor:pointer; }
+button:disabled { background:#b2bec3; cursor:wait; }
+button.secondary { background:#636e72; }
+select, input[type=text] { padding:8px; border:1px solid var(--line); border-radius:5px; font-size:14px; }
+#status { margin-top:10px; font-size:14px; }
+.bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:6px; }
+.bar>div { height:100%; width:0; background:var(--accent); transition:width .4s; }
+table { border-collapse:collapse; width:100%; font-size:13px; background:#fff; }
+th,td { border:1px solid var(--line); padding:6px 10px; text-align:left; }
+th { background:#ecf0f1; cursor:pointer; user-select:none; }
+tr:hover td { background:#f7f9ff; }
+.flag-HIGH_PROBABILITY_PLAGIARISM { color:#fff; background:var(--bad); padding:2px 8px; border-radius:3px; font-weight:600; }
+.flag-SUSPICIOUS { color:#fff; background:var(--warn); padding:2px 8px; border-radius:3px; font-weight:600; }
+.hidden { display:none; }
+.note { color:#636e72; font-size:12px; }
+a { color:var(--accent); }
+.cluster { display:inline-block; background:#ecf0f1; border:1px solid var(--line); border-radius:14px; padding:4px 12px; margin:3px; font-size:13px; }
+.err { color:var(--bad); font-size:13px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<header><h1>CopCat</h1>
+<div class="sub">deterministic lab plagiarism audit &amp; rubric grading &mdash; no AI tokens, everything runs locally</div></header>
+<main>
+
+<div class="card">
+<h2>1. Upload</h2>
+<div class="drop" id="drop">Drop the <b>submissions ZIP</b> here (Canvas / Classroom / Moodle export, or loose .py files) &mdash; or click to browse
+<input type="file" id="file" hidden></div>
+<div class="row" style="margin-top:12px">
+<label>Rubric (optional, for grading): <input type="file" id="rubric" accept=".yaml,.yml"></label>
+</div>
+</div>
+
+<div class="card">
+<h2>2. Run</h2>
+<div class="row">
+<label>Preserved names <input type="text" id="preserve" placeholder="Book,Library,calculate_pay,..."></label>
+<button class="secondary" onclick="run('audit')">Run audit</button>
+<button class="secondary" onclick="run('grade')">Run grading</button>
+<button onclick="run('both')">Run both</button>
+</div>
+<div id="status"></div>
+<div class="bar"><div id="bar"></div></div>
+<div id="err" class="err"></div>
+</div>
+
+<div class="card hidden" id="results">
+<h2>3. Results</h2>
+<div class="row" style="margin-bottom:10px">
+<a id="dlcsv" class="hidden"><button>Export gradebook CSV</button></a>
+<a id="linkindex" target="_blank"><button class="secondary">Full HTML report</button></a>
+<a id="linkaudit" target="_blank"><button class="secondary">Audit (txt)</button></a>
+</div>
+<div id="clusters"></div>
+<h2 style="margin-top:18px">Flagged pairs</h2>
+<table id="pairs"><thead><tr>
+<th onclick="sortTable(0)">A</th><th onclick="sortTable(1)">B</th>
+<th onclick="sortTable(2)">%</th><th>flag</th><th>dossier</th>
+</tr></thead><tbody></tbody></table>
+<h2 style="margin-top:18px">Gradebook</h2>
+<div id="gradebook"></div>
+</div>
+
+</main>
+<script>
+let jobId = null, pollTimer = null;
+const $ = id => document.getElementById(id);
+const drop = $("drop");
+drop.onclick = () => $("file").click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over");
+  if (e.dataTransfer.files.length) $("file").files = e.dataTransfer.files; };
+
+function run(mode) {
+  const f = $("file").files[0];
+  if (!f) { alert("Choose a submissions file first"); return; }
+  const up = new FormData();
+  up.append("submissions", f);
+  const rub = $("rubric").files[0];
+  if (rub) up.append("rubric", rub);
+  $("status").textContent = "Uploading...";
+  fetch("/api/jobs", { method: "POST", body: up })
+    .then(r => r.json()).then(d => {
+      jobId = d.job_id;
+      const run = new FormData();
+      run.append("mode", mode);
+      run.append("preserve", $("preserve").value);
+      return fetch(`/api/jobs/${jobId}/run`, { method: "POST", body: run });
+    }).then(() => poll());
+}
+
+function poll() {
+  clearInterval(pollTimer);
+  const dots = [".", "..", "..."]; let i = 0;
+  $("bar").style.width = "15%";
+  pollTimer = setInterval(() => {
+    fetch(`/api/jobs/${jobId}`).then(r => r.json()).then(d => {
+      $("status").textContent = "status: " + d.status + dots[i++ % 3];
+      $("bar").style.width = Math.min(90, 15 + i * 4) + "%";
+      if (d.status === "done") { clearInterval(pollTimer); render(d); }
+      if (d.status === "error") { clearInterval(pollTimer);
+        $("status").textContent = "failed"; $("err").textContent = d.error; }
+    });
+  }, 1200);
+}
+
+function render(d) {
+  $("bar").style.width = "100%";
+  $("status").textContent = `done in ${d.runtime_s}s`;
+  $("results").classList.remove("hidden");
+  $("dlcsv").href = `/api/jobs/${jobId}/gradebook.csv`;
+  $("dlcsv").classList.remove("hidden");
+  $("linkindex").href = `/api/jobs/${jobId}/report/index.html`;
+  $("linkaudit").href = `/api/jobs/${jobId}/report/copcat_audit.txt`;
+  const S = d.summary || {};
+  const flagged = S.pairs || [];
+  const tbody = $("pairs").tBodies[0]; tbody.innerHTML = "";
+  for (const p of flagged) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.a}</td><td>${p.b}</td><td>${p.blended}%</td>` +
+      `<td><span class="flag-${p.flag}">${p.flag}</span></td>` +
+      `<td><a href="/api/jobs/${jobId}/dossier/${p.a}/${p.b}" target="_blank">open dossier</a></td>`;
+    tbody.appendChild(tr);
+  }
+  $("clusters").innerHTML = flagged.length
+    ? "<h2>Clusters</h2>" + [...new Set(flagged.flatMap(p => [p.a, p.b]))]
+        .map(r => `<span class="cluster">${r}</span>`).join("")
+    : "";
+  const gb = S.gradebook || [];
+  if (gb.length) {
+    const keys = Object.keys(gb[0].task_scores || {});
+    let t = "<table><tr><th onclick='sortTable(0)'>Roll</th><th>File</th><th>Final</th>";
+    keys.forEach((k, i) => t += `<th onclick='sortTable(${i + 3})'>${k}</th>`);
+    t += "<th>Deductions</th></tr>";
+    for (const g of gb) {
+      t += `<tr><td>${g.roll}</td><td>${g.filename}</td><td><b>${g.final}</b></td>`;
+      keys.forEach(k => t += `<td>${(g.task_scores[k] ?? 0).toFixed(2)}</td>`);
+      t += `<td>${g.report}</td></tr>`;
+    }
+    $("gradebook").innerHTML = t + "</table>";
+  } else {
+    $("gradebook").innerHTML = "<p class='note'>No rubric was provided (grading skipped).</p>";
+  }
+}
+
+function sortTable(col) {
+  const table = document.activeElement.closest("main") ? $("pairs") : $("pairs");
+  [...document.querySelectorAll("#pairs, #gradebook")].forEach(t => {
+    if (!t || !t.tBodies.length || t.id !== "pairs" && col >= 3) return;
+  });
+  const tb = $("pairs").tBodies[0];
+  [...tb.rows].sort((r1, r2) => {
+    const a = r1.cells[col].textContent, b = r2.cells[col].textContent;
+    const na = parseFloat(a), nb = parseFloat(b);
+    return (!isNaN(na) && !isNaN(nb)) ? nb - na : a.localeCompare(b);
+  }).forEach(r => tb.appendChild(r));
+}
+</script>
+</body>
+</html>

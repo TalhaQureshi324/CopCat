@@ -31,6 +31,10 @@ def build_parser():
                         "(0 = auto: one per CPU core; 1 = single process)")
     a.add_argument("--out", default="reports", help="output directory")
 
+    w = sub.add_parser("web", help="launch the local web dashboard")
+    w.add_argument("--port", type=int, default=8000)
+    w.add_argument("--host", default="127.0.0.1")
+
     g = sub.add_parser("grade", help="grade submissions against a YAML rubric")
     g.add_argument("directory")
     g.add_argument("--rubric", required=True, help="path to rubric YAML")
@@ -44,6 +48,11 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+
+    if args.cmd == "web":
+        import uvicorn
+        uvicorn.run("copcat.webapp:app", host=args.host, port=args.port)
+        return
 
     if args.cmd == "grade":
         from .rubric import run_grade
