@@ -70,7 +70,7 @@ copcat/
 ## Roadmap
 
 - **M2**: forensics (Colab notebook-ID matching), multiprocessing for large batches
-- **M3**: Diff Explainer (side-by-side HTML with AST variable mapping table), D3 cluster collusion graph
+- **M3 (done)**: Diff Explainer + D3 cluster graph — see `copcat/webreport.py`; audit now also writes `index.html` + per-pair diff pages
 - **M4**: rubric engine — YAML rubric → ~25 check types (static AST / sandboxed
   dynamic with Job-Object isolation + mocked stdin / functional property tests),
   auto-generated evidence-based deduction reports

@@ -229,3 +229,29 @@ def canonical_tokens(src, preserved=()):
             t = "S"
         out.append(t)
     return out, ok, failed
+
+
+def identifier_map(src, preserved=()):
+    """Map student-chosen identifiers to their canonical forms.
+
+    Returns (orig->canon merged dict, canon->set(original names)) —
+    (None, None) if the file cannot be parsed at all. Used by the Diff
+    Explainer to show how A's `total_copies` corresponds to B's `tCop`:
+    both resolve to the same canonical name.
+    """
+    tree, ok, failed = parse_lenient(src)
+    if tree is None:
+        return None, None
+    _strip_docstrings(tree)
+    ren = CanonRenamer(preserved)
+    ren.visit(tree)
+    merged = {}
+    for scope in ren.scopes:
+        for k, v in scope.items():
+            merged.setdefault(k, v)
+    for k, v in ren.attrs.items():
+        merged.setdefault(k, v)
+    rev = {}
+    for k, v in merged.items():
+        rev.setdefault(v, set()).add(k)
+    return merged, rev

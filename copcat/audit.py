@@ -58,10 +58,18 @@ def run_audit(directory, cfg, out_dir, workers=1):
 
     csv_path = os.path.join(out_dir, "copcat_audit.csv")
     txt_path = os.path.join(out_dir, "copcat_audit.txt")
+    html_path = os.path.join(out_dir, "index.html")
     report_mod.write_csv(csv_path, pairs)
     report_mod.write_txt(txt_path, subs, pairs, clusters, cfg, started,
                          damped=damped, forensics=forensics,
                          collisions=collisions)
+    try:
+        from .webreport import write_html_report
+        write_html_report(html_path, subs, pairs, clusters, cfg,
+                          forensics=forensics, collisions=collisions)
+        print("Wrote {}".format(html_path))
+    except Exception as exc:            # the HTML dashboard must never break the audit
+        print("HTML report skipped: {}".format(exc))
 
     n_susp = sum(1 for p in pairs if p.flag == "SUSPICIOUS")
     n_high = sum(1 for p in pairs if p.flag == "HIGH_PROBABILITY_PLAGIARISM")
