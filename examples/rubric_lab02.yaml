@@ -1,0 +1,96 @@
+# CopCat rubric - AI Lab 02: Object-Oriented & Advanced Python Programming
+# Total: 10.0 marks. Deduction values mirror the lab specification.
+# Instructors: tune `deduct:` values and add checks freely; every check that
+# fails contributes its `deduct` to the task (score floors at 0) and its
+# message to the auto-generated Deduction_Report.
+
+lab: ai_lab02
+settings:
+  timeout_s: 10        # per-submission sandbox budget (menus can't hang us:
+  memory_mb: 512       # input() raises EOFError inside the sandbox)
+
+tasks:
+  - id: T1            # Library Catalogue (1.5)
+    weight: 1.5
+    checks:
+      - { id: t1_book,      type: exists_class,    name: Book,        deduct: 0.4 }
+      - { id: t1_borrow,    type: exists_method,   class: Book, method: borrow_book, deduct: 0.2 }
+      - { id: t1_return,    type: exists_method,   class: Book, method: return_book, deduct: 0.2 }
+      - { id: t1_attrs,     type: has_attrs,       class: Book,
+          attrs: [title, author, isbn, total_copies, available_copies], deduct: 0.2 }
+      - { id: t1_find,      type: exists_method,   class: Library, method: find_by_title, deduct: 0.2 }
+      - { id: t1_total,     type: exists_method,   class: Library, method: total_books_available, deduct: 0.2 }
+      - { id: t1_str,       type: exists_method,   class: Book, method: __str__, deduct: 0.1 }
+
+  - id: T2            # Employee Hierarchy (1.5)
+    weight: 1.5
+    checks:
+      - { id: t2_base,   type: exists_class,  name: Employee, deduct: 0.2 }
+      - { id: t2_sup_m,  type: calls_super,   class: Manager,   method: calculate_pay, deduct: 0.3 }
+      - { id: t2_sup_d,  type: calls_super,   class: Developer, method: calculate_pay, deduct: 0.3 }
+      - { id: t2_intern, type: exists_method, class: Intern,    method: calculate_pay, deduct: 0.2 }
+      - { id: t2_demo,   type: regex_present,
+          pattern: "for\\s+\\w+\\s+in\\s+[A-Za-z_][\\w.]*\\s*:[\\s\\S]{0,300}?calculate_pay\\s*\\(",
+          deduct: 0.2, fail: "no polymorphic loop over a staff list found" }
+      # NOTE: isinstance/type() inside Complex.__eq__ is legitimate; the ban
+      # targets polymorphic dispatch in the staff loop, which the regex above
+      # plus human review should judge.
+
+  - id: T3            # Secure Bank Account (1.5)
+    weight: 1.5
+    checks:
+      - { id: t3_cls,     type: exists_class,      name: BankAccount, deduct: 0.3 }
+      - { id: t3_mangled, type: name_mangled_attr, class: BankAccount, attr: balance, deduct: 0.4 }
+      - { id: t3_prop,    type: has_decorator,     class: BankAccount, method: balance, decorator: property, deduct: 0.2 }
+      - { id: t3_neg,     type: functional, construct: ["BankAccount(5000)", "BankAccount('Bilal', 5000)", "BankAccount(name='Bilal', balance=5000)"], call: "obj.withdraw(-5)",
+          expect: raises_any, deduct: 0.2 }
+      - { id: t3_insuf,   type: functional, construct: ["BankAccount(100)", "BankAccount('Bilal', 100)"], call: "obj.withdraw(9999)",
+          expect: raises_any, deduct: 0.2 }
+      - { id: t3_demo,    type: comment_regex_present, pattern: "mangl|attributeerror|private|cannot be (changed|accessed)|no setter",
+          label: "direct-assignment demo", deduct: 0.2 }
+
+  - id: T4            # Complex Number Arithmetic (1.5)
+    weight: 1.5
+    checks:
+      - { id: t4_cls,   type: exists_class,  name: Complex, deduct: 0.3 }
+      - { id: t4_add,   type: functional, construct: "Complex(2, 3)", call: "obj + Complex(1, 2)", expect: ok, deduct: 0.2 }
+      - { id: t4_sub,   type: functional, construct: "Complex(2, 3)", call: "obj - Complex(1, 2)", expect: ok, deduct: 0.2 }
+      - { id: t4_mul,   type: functional, construct: "Complex(2, 3)", call: "obj * Complex(1, 2)", expect: ok, deduct: 0.2 }
+      - { id: t4_abs,   type: functional, construct: "Complex(3, 4)", call: "abs(obj)", expect: ok, deduct: 0.2 }
+      - { id: t4_sign,  type: functional, construct: "Complex(3, -4)",
+          call: "'-' in str(obj) and '+' not in str(obj)",
+          expect: truthy, deduct: 0.2,
+          fail: "__str__ prints '3 + -4i' style output (sign rule broken)" }
+      - { id: t4_eq,    type: functional, construct: "Complex(2, 3)", call: "obj == Complex(2, 3)", expect: truthy, deduct: 0.2 }
+
+  - id: T5            # Shape Processor (2.0)
+    weight: 2.0
+    checks:
+      - { id: t5_abc,    type: base_class,     name: Shape, base: ABC, deduct: 0.5 }
+      - { id: t5_abs_a,  type: has_decorator,  class: Shape, method: area, decorator: abstractmethod, deduct: 0.25 }
+      - { id: t5_abs_p,  type: has_decorator,  class: Shape, method: perimeter, decorator: abstractmethod, deduct: 0.25 }
+      - { id: t5_circle, type: exists_class,   name: Circle, deduct: 0.1 }
+      - { id: t5_rect,   type: exists_class,   name: Rectangle, deduct: 0.1 }
+      - { id: t5_tri,    type: exists_class,   name: Triangle, deduct: 0.1 }
+      - { id: t5_heron,  type: regex_present,  pattern: "s\\s*\\*\\s*\\(\\s*s\\s*-|\\*\\s*\\(\\s*s\\s*-",
+          deduct: 0.5, fail: "Triangle.area does not use Heron's formula" }
+      - { id: t5_total,  type: regex_present,  pattern: "def\\s+total_area", deduct: 0.2 }
+      - { id: t5_eff,    type: regex_present,  pattern: "def\\s+most_eff|def\\s+eff", deduct: 0.2 }
+      - { id: t5_demo,   type: comment_regex_present, pattern: "typeerror|abstract", label: "TypeError demo", deduct: 0.2 }
+
+  - id: T6            # Inventory System (2.0)
+    weight: 2.0
+    checks:
+      - { id: t6_base1,  type: base_class, class: InsufficientStockError, base: InventoryError, deduct: 0.25 }
+      - { id: t6_base2,  type: base_class, class: InvalidQuantityError, base: InventoryError, deduct: 0.25 }
+      - { id: t6_remove, type: exists_method, class: InventoryItem, method: remove_stock, deduct: 0.2 }
+      - { id: t6_neg,    type: functional, construct: ["InventoryItem('USB Cable', 10, 5)", "InventoryItem(name='USB Cable', quantity=10, reorder_level=5)"], call: "obj.remove_stock(-2)",
+          expect: raises_any, deduct: 0.25 }
+      - { id: t6_stock,  type: functional, construct: ["InventoryItem('USB Cable', 10, 5)", "InventoryItem(name='USB Cable', quantity=10, reorder_level=5)"], call: "obj.remove_stock(100)",
+          expect: raises_any, deduct: 0.25 }
+      - { id: t6_low,    type: regex_present, pattern: "reorder_level|reorder", deduct: 0.2,
+          fail: "no reorder-level / low-stock logic found" }
+      - { id: t6_catch,  type: regex_present, pattern: "except\\s+InventoryError", deduct: 0.4,
+          fail: "driver does not catch InventoryError polymorphically" }
+      - { id: t6_demo,   type: regex_present, pattern: "remove_stock\\(\\s*-", deduct: 0.2,
+          fail: "driver never tests an invalid (<=0) quantity" }

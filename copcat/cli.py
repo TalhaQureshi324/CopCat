@@ -31,10 +31,14 @@ def build_parser():
                         "(0 = auto: one per CPU core; 1 = single process)")
     a.add_argument("--out", default="reports", help="output directory")
 
-    g = sub.add_parser("grade", help="grade against a YAML rubric (M4)")
+    g = sub.add_parser("grade", help="grade submissions against a YAML rubric")
     g.add_argument("directory")
-    g.add_argument("--rubric", required=True)
-    g.add_argument("--out", default="report.csv")
+    g.add_argument("--rubric", required=True, help="path to rubric YAML")
+    g.add_argument("--timeout", type=float, default=None,
+                   help="override sandbox timeout per submission (seconds)")
+    g.add_argument("--memory", type=int, default=None,
+                   help="override sandbox memory cap (MB)")
+    g.add_argument("--out", default="grade_report.csv", help="output CSV path")
     return p
 
 
@@ -42,9 +46,11 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
 
     if args.cmd == "grade":
-        print("rubric grading lands in milestone M4 (sandboxed dynamic checks).")
-        print("This build ships the audit engine only.")
-        sys.exit(2)
+        from .rubric import run_grade
+        run_grade(os.path.abspath(args.directory), args.rubric,
+                  os.path.abspath(args.out), timeout_s=args.timeout,
+                  memory_mb=args.memory)
+        return
 
     cfg = AuditConfig(
         k=args.k,

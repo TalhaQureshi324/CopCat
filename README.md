@@ -7,8 +7,8 @@ courses. **Zero AI tokens at grading time.**
 # 1. Plagiarism audit over a folder of submissions (zero configuration)
 python -m copcat audit ./submissions/ --starter ./manual_starter.py
 
-# 2. Grade against a YAML rubric (milestone M4)
-python -m copcat grade ./submissions/ --rubric rubric.yaml --out report.csv
+# 2. Grade against a YAML rubric (sandboxed, zero AI tokens)
+python -m copcat grade ./submissions/ --rubric examples/rubric_lab02.yaml --out grade_report.csv
 ```
 
 ## Why not MOSS
