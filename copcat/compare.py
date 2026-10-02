@@ -50,7 +50,7 @@ def compare_pair(a, b, cfg):
 
     # evasion-match rule: a mostly-commented file whose folded code shadow
     # lines up with another student's live code = MOSS-evasion signature.
-    # Unrelated files sit at ~1-8% shadow containment, so >=15% with a large
+    # Unrelated files sit at ~1-8% shadow containment, so >=12% with a large
     # folded shadow is decisive evidence; >=25% escalates to HIGH.
     blended = max(
         scores["source"][0],
@@ -59,20 +59,6 @@ def compare_pair(a, b, cfg):
         shadow_direct,
     )
     evidence = []
-    big_shadow = max(len(a.shadow_tokens), len(b.shadow_tokens))
-    mostly_commented = bool(a.notes or b.notes)
-    evasion = (mostly_commented and big_shadow >= cfg.evasion_big_shadow
-               and shadow_direct >= cfg.evasion_shadow_min)
-    if evasion:
-        who = a.roll if len(a.shadow_tokens) == big_shadow else b.roll
-        evidence.append(
-            "evasion match: commented-out code shadow of {} aligns with live "
-            "code at {:.0%} ({} folded tokens; unrelated pairs sit at ~1-8%)"
-            .format(who, shadow_direct, big_shadow))
-        if shadow_direct >= cfg.evasion_shadow_min + 0.10:
-            blended = max(blended, cfg.high)
-        else:
-            blended = max(blended, cfg.suspicious)
 
     if blended >= cfg.high:
         flag = "HIGH_PROBABILITY_PLAGIARISM"
@@ -115,3 +101,36 @@ def _compare_job(args):
     """Top-level worker so ProcessPoolExecutor can pickle it (Windows spawn)."""
     a, b, cfg = args
     return compare_pair(a, b, cfg)
+
+
+def apply_evasion_rule(pairs, subs, cfg):
+    """A mostly-commented file is ONE submitted solution: its counterpart is
+    its single best shadow match, not every family member it brushes against.
+    For each mostly-commented submission (>= cfg.evasion_big_shadow folded
+    tokens), flag only the argmax shadow containment pair (>=
+    cfg.evasion_shadow_min). Mutates and returns the pair list."""
+    by_roll = {s.roll: s for s in subs}
+    hits = {}   # mostly-commented roll -> (pair, score)
+    for p in pairs:
+        for roll in (p.roll_a, p.roll_b):
+            s = by_roll.get(roll)
+            if not s or not s.notes:                       # not mostly-commented
+                continue
+            if len(s.shadow_tokens) < cfg.evasion_big_shadow:
+                continue
+            if p.scores["shadow"][0] >= cfg.evasion_shadow_min:
+                if roll not in hits or p.scores["shadow"][0] > hits[roll][1]:
+                    hits[roll] = (p, p.scores["shadow"][0])
+    for roll, (p, score) in hits.items():
+        other = p.roll_b if p.roll_a == roll else p.roll_a
+        p.evidence.append(
+            "evasion match: commented-out code shadow of {} aligns with live "
+            "code of {} at {:.0%} ({} folded tokens; unrelated pairs sit at "
+            "~1-8%)".format(roll, other, score, len(by_roll[roll].shadow_tokens)))
+        p.blended = max(p.blended, cfg.suspicious)
+        if score >= cfg.evasion_shadow_min + 0.10:
+            p.flag = "HIGH_PROBABILITY_PLAGIARISM"
+        else:
+            p.flag = "SUSPICIOUS"
+    pairs.sort(key=lambda r: r.blended, reverse=True)
+    return pairs

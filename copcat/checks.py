@@ -186,9 +186,20 @@ def _scoped_source(tree, src, scope):
     return src
 
 
+def _code_only(src):
+    """Comment-stripped source. Regex checks search this by default so a
+    commented-out implementation can never earn marks (the grading-side
+    mirror of the MOSS comment-evasion problem)."""
+    from .lexing import lex
+    _t, _c, _s, code_lines, _ok = lex(src)
+    return "\n".join(code_lines)
+
+
 @check("forbidden_pattern")
 def _forbidden_pattern(tree, src, p):
     seg = _scoped_source(tree, src, p.get("scope", "file"))
+    if not p.get("include_comments"):
+        seg = _code_only(seg)
     hits = re.search(p["pattern"], seg)
     if hits:
         return False, p.get("fail", "forbidden pattern '{}' found in scope '{}'".format(
@@ -198,7 +209,8 @@ def _forbidden_pattern(tree, src, p):
 
 @check("regex_present")
 def _regex_present(tree, src, p):
-    if re.search(p["pattern"], src):
+    blob = src if p.get("include_comments") else _code_only(src)
+    if re.search(p["pattern"], blob):
         return True, p.get("pass_detail", "pattern '{}' present".format(p["pattern"]))
     return False, p.get("fail", "pattern '{}' not found".format(p["pattern"]))
 

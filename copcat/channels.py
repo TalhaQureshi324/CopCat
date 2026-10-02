@@ -4,7 +4,7 @@ starter/base-code subtraction (MOSS `-b` equivalent)."""
 from .lexing import lex, normalize_words, TOKEN_RE
 from .canon import canonical_tokens
 from .shadow import fold_comments, CODE_LIKE_RE, _strip_hash
-from .normal import fingerprint, word_shingles
+from .normal import fingerprint, fingerprint_adaptive, word_shingles
 
 WINNOW_CHANNELS = ("token", "ast", "shadow")
 SHINGLE_CHANNELS = ("comment", "string")
@@ -37,7 +37,7 @@ def build_submission(roll, filename, path, source, cfg):
 
     # canonical AST channel (fault-tolerant parse inside)
     sub.canonical_tokens, sub.parse_ok, sub.chunks_failed = \
-        canonical_tokens(source, preserved=cfg.preserved)
+        canonical_tokens(source, preserved=())  # audit: rename-invariant
 
     # source-line channel: token-stripped lines; if the file is mostly
     # comments, fall back to decommented CODE-LIKE lines only (prose lines
@@ -53,9 +53,14 @@ def build_submission(roll, filename, path, source, cfg):
     sub.code_text = "\n".join(sub.effective_lines)
 
     # fingerprints
-    sub.fps["token"] = fingerprint(tokens, cfg.k, cfg.window)
-    sub.fps["ast"] = fingerprint(sub.canonical_tokens, cfg.k, cfg.window)
-    sub.fps["shadow"] = fingerprint(shadow_tokens, cfg.k, cfg.window)
+    sub.fps["token"] = fingerprint_adaptive(tokens, cfg.k, cfg.window)
+    # k=8 for the AST channel: canonical numbering drifts by one after any
+    # rename-count difference, and k=16 windows would shatter around every
+    # drift point. Finer granularity tolerates that; the batch damper still
+    # removes generic structural k-grams.
+    sub.fps["ast"] = fingerprint_adaptive(sub.canonical_tokens,
+                                           min(cfg.k, 8), max(2, cfg.window // 2))
+    sub.fps["shadow"] = fingerprint_adaptive(shadow_tokens, cfg.k, cfg.window)
     sub.fps["comment"] = word_shingles(sub.comment_words, cfg.comment_ngram)
     sub.fps["string"] = word_shingles(sub.string_words, cfg.comment_ngram)
     return sub
@@ -81,10 +86,10 @@ def build_starter_profile(starter_sources, cfg):
     for src in starter_sources:
         tokens, comments, strings, code_lines, _ = lex(src)
         shadow_tokens, shadow_strings, _cl, _t = fold_comments(comments)
-        canon, _ok, _f = canonical_tokens(src, preserved=cfg.preserved)
-        fps["token"] |= fingerprint(tokens, cfg.k, cfg.window)
-        fps["ast"] |= fingerprint(canon, cfg.k, cfg.window)
-        fps["shadow"] |= fingerprint(shadow_tokens, cfg.k, cfg.window)
+        canon, _ok, _f = canonical_tokens(src, preserved=())
+        fps["token"] |= fingerprint_adaptive(tokens, cfg.k, cfg.window)
+        fps["ast"] |= fingerprint_adaptive(canon, cfg.k, cfg.window)
+        fps["shadow"] |= fingerprint_adaptive(shadow_tokens, cfg.k, cfg.window)
         fps["comment"] |= word_shingles(normalize_words(" ".join(t for _, t in comments)),
                                         cfg.comment_ngram)
         fps["string"] |= word_shingles(normalize_words(" ".join(list(strings) + list(shadow_strings))),
@@ -116,14 +121,18 @@ def subtract_starter(sub, profile):
                            if " ".join(ln.split()) not in starter_lines]
 
 
-def apply_batch_damper(subs, cfg, share=0.30, min_docs=3):
+def apply_batch_damper(subs, cfg, min_docs=3):
     """Remove fingerprints shared by too much of the batch (mandated
     skeleton / manual boilerplate), so common template code can't manufacture
-    similarity. Returns {channel: removed_count}."""
+    similarity. The AST channel uses a stricter bar (see
+    AuditConfig.damp_share_ast) or rename-invariance evidence would be
+    erased wherever a third submission happens to duplicate the same
+    structure. Returns {channel: removed_count}."""
     n = len(subs)
-    cutoff = max(min_docs, int(round(share * n)))
     removed = {}
     for ch in WINNOW_CHANNELS + SHINGLE_CHANNELS:
+        share = cfg.damp_share_ast if ch == "ast" else cfg.damp_share
+        cutoff = max(min_docs, int(round(share * n)))
         df = {}
         for s in subs:
             for h in s.fps[ch]:

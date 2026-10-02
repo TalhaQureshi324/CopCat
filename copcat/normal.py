@@ -39,6 +39,21 @@ def fingerprint(tokens, k, w):
     return winnow(kgram_hashes(tokens, k), w)
 
 
+def full_kgram_set(tokens, k):
+    """Unsampled k-gram set — the exact similarity denominator for typical
+    file sizes. Winnowing only guarantees a shared region is *detected*
+    (some fingerprint shared); its window samples drift on same-length
+    rewrites, so set containment undercounts renamed copies. Full sets do
+    not, and are cheap up to a few thousand tokens."""
+    return set(kgram_hashes(tokens, k))
+
+
+def fingerprint_adaptive(tokens, k, w, full_set_cap=4000):
+    if len(tokens) <= full_set_cap:
+        return full_kgram_set(tokens, k)
+    return winnow(kgram_hashes(tokens, k), w)
+
+
 def word_shingles(words, n):
     if not words:
         return set()

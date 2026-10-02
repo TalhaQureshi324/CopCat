@@ -8,10 +8,14 @@ class AuditConfig:
     k: int = 16                  # tokens per k-gram (code channels)
     window: int = 8              # winnowing window
     comment_ngram: int = 5       # words per shingle (comment/string channels)
+    damp_share: float = 0.30     # batch damper bar (fraction of files)
+    damp_share_ast: float = 0.50  # stricter bar for the AST channel: canonical
+    # equivalence makes every same-structure hierarchy "shared" across a batch,
+    # so the default bar would erase rename-invariance evidence
     suspicious: float = 0.60     # flag threshold
     high: float = 0.80           # high-probability threshold
     confirm_min: float = 0.45    # prefilter bar for expensive confirmations
-    evasion_shadow_min: float = 0.15  # shadow-vs-live containment for evasion match
+    evasion_shadow_min: float = 0.12  # shadow-vs-live containment for evasion match
     evasion_big_shadow: int = 400     # folded shadow tokens for evasion match
     min_lines: int = 15          # skip pairs where a side has fewer code lines
     preserved: tuple = ()        # interface names never canonicalized

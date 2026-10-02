@@ -66,15 +66,18 @@ def main():
             constructs = [constructs]
         obj = None
         last_err = None
+        construct_out = io.StringIO()
         try:
-            for c in constructs:               # rubric may offer alternate
-                scope = dict(mod_ns)           # constructor signatures
-                try:
-                    obj = eval(c, scope)       # noqa: S307 - sandboxed
-                    last_err = None
-                    break
-                except BaseException as exc:
-                    last_err = exc
+            with contextlib.redirect_stdout(construct_out):
+                # student __init__/__new__ prints must not corrupt the JSON
+                for c in constructs:           # rubric may offer alternate
+                    scope = dict(mod_ns)       # constructor signatures
+                    try:
+                        obj = eval(c, scope)   # noqa: S307 - sandboxed
+                        last_err = None
+                        break
+                    except BaseException as exc:
+                        last_err = exc
         except BaseException as exc:
             last_err = exc
         if last_err is not None or obj is None:
@@ -98,7 +101,7 @@ def main():
                     result["probes"][pid] = {"status": "ok",
                                              "result": "constructed"}
             # student __str__/__repr__ prints must never corrupt the JSON
-            extra = probe_out.getvalue()
+            extra = construct_out.getvalue() + probe_out.getvalue()
             if extra:
                 result["probes"][pid]["detail"] = extra[:200]
         except BaseException as exc:

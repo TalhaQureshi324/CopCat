@@ -169,7 +169,7 @@ def write_txt(path, subs, pairs, clusters, cfg, started, damped=None,
     ap("* Shadow channel folds commented-out code back into matching; a high")
     ap("  shadow score with low source score means the overlap lives inside")
     ap("  comments (classic MOSS-evasion). Evasion matches require a large")
-    ap("  folded shadow (>=400 tokens) and >=25% alignment with live code.")
+    ap("  folded shadow (>=400 tokens) and >=12% alignment with live code.")
     ap("* AST channel uses scope-aware canonical renaming with preserved symbols;")
     ap("  it is insensitive to variable/method renaming but sensitive to the")
     ap("  mandated interface skeleton, so moderate ast values are expected.")

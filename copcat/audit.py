@@ -8,7 +8,7 @@ from .models import AuditConfig
 from .ingest import load_sources
 from .channels import (build_submission, build_starter_profile,
                        subtract_starter, apply_batch_damper)
-from .compare import compare_all
+from .compare import compare_all, apply_evasion_rule
 from .cluster import clusters_from_pairs
 from .forensics import build_forensics, apply_forensics_to_pairs
 from . import report as report_mod
@@ -48,6 +48,7 @@ def run_audit(directory, cfg, out_dir, workers=1):
     damped = apply_batch_damper(subs, cfg)
 
     pairs = compare_all(subs, cfg, workers=workers)
+    pairs = apply_evasion_rule(pairs, subs, cfg)
 
     # forensics: shared notebook/drive IDs are definitive regardless of metrics
     forensics, collisions = build_forensics(subs)
