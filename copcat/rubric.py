@@ -30,6 +30,7 @@ import json
 import os
 import re
 import tempfile
+import zipfile
 
 from .canon import parse_lenient
 from .checks import get_check
@@ -125,17 +126,17 @@ def _probe_of(check):
         return pr
 
     if ctype == "functional_call_raises":
-        target = chk.get("target")
-        exc = chk.get("expected_exception", "Exception")
+        target = check.get("target")
+        exc = check.get("expected_exception", "Exception")
         return [std_probe("{}::{}".format(cid, m), "{}()".format(target),
                           call="obj.{}()".format(m))
-                for m in chk.get("methods", [])]
+                for m in check.get("methods", [])]
     if ctype == "functional_call_returns":
-        return [std_probe(cid, chk["function"], args=chk.get("args", []),
+        return [std_probe(cid, check["function"], args=check.get("args", []),
                           kind="call_args")]
     if ctype == "functional_property_test":
-        return [std_probe(cid, chk.get("target"),
-                          steps=chk.get("sequence", []),
+        return [std_probe(cid, check.get("target"),
+                          steps=check.get("sequence", []),
                           kind="sequence")]
     return [std_probe(cid, check.get("construct"), call=check.get("call"),
                       set_expr=check.get("set_expr"))]
