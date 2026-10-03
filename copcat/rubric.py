@@ -692,7 +692,7 @@ def grade_batch(files_by_roll, rubric):
 
 
 def run_grade(directory, rubric_path, out_csv, timeout_s=None, memory_mb=None):
-    """Grade every submission in `directory` against the rubric; write CSV."""
+    """Grade every submission in `directory` (or ZIP) against the rubric."""
     import csv
     from .ingest import discover, extract_roll
 
@@ -701,6 +701,23 @@ def run_grade(directory, rubric_path, out_csv, timeout_s=None, memory_mb=None):
         rubric["settings"]["timeout_s"] = float(timeout_s)
     if memory_mb:
         rubric["settings"]["memory_mb"] = int(memory_mb)
+
+    # if given a zip, extract to a temp dir first so sandbox has real paths
+    if directory.lower().endswith(".zip"):
+        tmp = tempfile.mkdtemp(prefix="copcat_grade_")
+        from .loader import _safe_member_name
+        with zipfile.ZipFile(directory) as zf:
+            for member in zf.infolist():
+                if member.is_dir():
+                    continue
+                safe = _safe_member_name(member.filename)
+                if not safe:
+                    continue
+                target = os.path.join(tmp, safe)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(member) as src_fh, open(target, "wb") as dst_fh:
+                    dst_fh.write(src_fh.read())
+        directory = tmp
 
     files_by_roll = {}
     for path in discover(directory):
