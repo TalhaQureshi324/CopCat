@@ -29,6 +29,9 @@ def build_parser():
     a.add_argument("--workers", type=int, default=0,
                    help="parallel workers for pairwise comparison "
                         "(0 = auto: one per CPU core; 1 = single process)")
+    a.add_argument("--csv-scope", default="all", dest="csv_scope",
+                   choices=["all", "flagged"],
+                   help="audit CSV: all pairs or only flagged ones")
     a.add_argument("--out", default="reports", help="output directory")
 
     w = sub.add_parser("web", help="launch the local web dashboard")
@@ -76,7 +79,8 @@ def main(argv=None):
     workers = args.workers
     if workers <= 0:
         workers = os.cpu_count() or 1
-    run_audit(directory, cfg, out_dir, workers=workers)
+    run_audit(directory, cfg, out_dir, workers=workers,
+              csv_scope=args.csv_scope)
 
 
 if __name__ == "__main__":

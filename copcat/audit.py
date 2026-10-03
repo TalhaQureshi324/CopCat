@@ -41,7 +41,7 @@ def _load_submissions(directory, cfg):
     return subs, blobs
 
 
-def run_audit(directory, cfg, out_dir, workers=1):
+def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all"):
     started = time.time()
     os.makedirs(out_dir, exist_ok=True)
 
@@ -85,7 +85,7 @@ def run_audit(directory, cfg, out_dir, workers=1):
     csv_path = os.path.join(out_dir, "copcat_audit.csv")
     txt_path = os.path.join(out_dir, "copcat_audit.txt")
     html_path = os.path.join(out_dir, "index.html")
-    report_mod.write_csv(csv_path, pairs)
+    report_mod.write_csv(csv_path, pairs, scope=csv_scope)
     report_mod.write_txt(txt_path, subs, pairs, clusters, cfg, started,
                          damped=damped, forensics=forensics,
                          collisions=collisions)

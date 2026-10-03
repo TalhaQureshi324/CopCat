@@ -25,7 +25,9 @@ def _matched_blocks(sub_a, sub_b, min_len=6, max_blocks=3, max_lines=8, width=10
     return out
 
 
-def write_csv(path, pairs):
+def write_csv(path, pairs, scope="all"):
+    if scope == "flagged":
+        pairs = [p for p in pairs if p.flag != "CLEAN"]
     with open(path, "w", newline="", encoding="utf-8") as fh:
         fh.write(",".join(CSV_HEADER) + "\n")
         for rank, p in enumerate(pairs, 1):
