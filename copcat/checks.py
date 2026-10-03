@@ -247,3 +247,102 @@ def _min_lines(tree, src, p):
     if n >= p.get("count", 10):
         return True, "{} non-blank lines".format(n)
     return False, "only {} non-blank lines".format(n)
+
+
+# ---- Lab 03 dialect: hierarchy, forbiddens, structural references ----------
+
+def _self_attrs(cls):
+    import ast
+    return {n.attr for n in ast.walk(cls)
+            if isinstance(n, ast.Attribute)
+            and isinstance(n.value, ast.Name)
+            and n.value.id in ("self", "cls")}
+
+
+@check("forbidden_import_or_usage")
+def _forbidden_import_or_usage(tree, src, p):
+    target = p["target"]
+    scope = p.get("scope")
+    seg = _scoped_source(tree, src, ("class:" + scope) if scope and ":" not in scope else (scope or "file"))
+    if not p.get("include_comments"):
+        seg = _code_only(seg)
+    parts = [re.escape(x) for x in target.split(".")]
+    usage = r"\b" + r"\s*\.\s*".join(parts) + r"\b"
+    import_form = (r"\bfrom\s+" + parts[0] + r"\s+import\s+[^\n]*\b" + parts[-1] + r"\b"
+                   + r"|\bimport\s+[^\n]*\b" + parts[-1] + r"\b")
+    if re.search(usage, seg) or re.search(import_form, seg):
+        return False, p.get("fail", "use of '{}' is not allowed here".format(target))
+    return True, "clean"
+
+
+@check("forbidden_instance_attrs")
+def _forbidden_instance_attrs(tree, src, p):
+    cls = _find_class(tree, p["class"])
+    if cls is None:
+        return False, "class '{}' missing".format(p["class"])
+    found = sorted(_self_attrs(cls) & set(p.get("attrs", [])))
+    if found:
+        return False, p.get("fail", "forbidden instance attribute(s): " + ", ".join(found))
+    return True, "no forbidden instance attributes"
+
+
+@check("exception_hierarchy")
+def _exception_hierarchy(tree, src, p):
+    import ast
+    base = p["base"]
+    subs = p.get("subclasses", [])
+    classes = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    acceptable = {base}
+    changed = True
+    while changed:
+        changed = False
+        for name, node in classes.items():
+            if name in acceptable:
+                continue
+            for b in node.bases:
+                bn = getattr(b, "id", None) or getattr(b, "attr", None)
+                if bn in acceptable:
+                    acceptable.add(name)
+                    changed = True
+                    break
+    missing = [s for s in subs if s not in classes]
+    if missing:
+        return False, p.get("fail", "missing exception class(es): " + ", ".join(missing))
+    wrong = [s for s in subs if s not in acceptable]
+    if wrong:
+        return False, p.get("fail", "{} does not inherit from '{}'".format(", ".join(wrong), base))
+    return True, "exception hierarchy ok"
+
+
+@check("method_exists")
+def _method_exists_plural(tree, src, p):
+    cls = _find_class(tree, p["class"])
+    if cls is None:
+        return False, "class '{}' missing".format(p["class"])
+    have = {m.name for m in _methods(cls)}
+    missing = [m for m in p.get("methods", []) if m not in have]
+    if missing:
+        return False, p.get("fail", "missing method(s): " + ", ".join(missing))
+    return True, "all required methods present"
+
+
+@check("class_exists")
+def _class_exists_plural(tree, src, p):
+    names = p.get("classes") or ([p["name"]] if p.get("name") else [])
+    missing = [n for n in names if _find_class(tree, n) is None]
+    if missing:
+        return False, p.get("fail", "missing class(es): " + ", ".join(missing))
+    return True, "all required classes present"
+
+
+@check("ast_uses_class")
+def _ast_uses_class(tree, src, p):
+    import ast
+    fname, required = p["function"], p["required_class"]
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == fname:
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Name) and sub.id == required:
+                    return True, "'{}' uses '{}'".format(fname, required)
+            return False, p.get("fail", "'{}' never references '{}'".format(fname, required))
+    return False, p.get("fail", "function '{}' not found".format(fname))

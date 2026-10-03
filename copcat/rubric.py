@@ -26,6 +26,7 @@ Check categories:
 """
 
 import ast
+import json
 import os
 import re
 
@@ -38,15 +39,34 @@ try:
 except ImportError:      # pragma: no cover
     yaml = None
 
-_STATIC_TYPES = {"exists_class", "exists_method", "has_attrs", "has_decorator",
-                 "calls_super", "base_class", "name_mangled_attr",
-                 "forbidden_pattern", "regex_present",
-                 "comment_regex_present", "min_lines"}
-_DYNAMIC_TYPES = {"runs_clean", "stdout_contains", "stdout_regex"}
+_STATIC_TYPES = {"exists_class", "exists_method", "method_exists",
+                 "class_exists", "has_attrs", "instance_attrs",
+                 "has_decorator", "calls_super", "base_class",
+                 "name_mangled_attr", "forbidden_pattern",
+                 "forbidden_import_or_usage", "forbidden_instance_attrs",
+                 "regex_present", "comment_regex_present", "min_lines",
+                 "exception_hierarchy", "ast_uses_class"}
+_STATIC_ALIASES = {"instance_attrs": "has_attrs"}
+_DYNAMIC_TYPES = {"runs_clean", "stdout_contains", "stdout_regex",
+                  "stdout_contains_pattern", "dynamic_execution"}
+_PROBE_TYPES = {"functional", "functional_call_raises",
+                "functional_call_returns", "functional_property_test"}
 
 
 class RubricError(Exception):
     pass
+
+
+def _known_check_types():
+    import difflib
+    from .checks import _REGISTRY
+    known = (set(_REGISTRY) | set(_DYNAMIC_TYPES) | set(_PROBE_TYPES)
+             | set(_STATIC_ALIASES))
+    def suggest(name):
+        close = difflib.get_close_matches(name, sorted(known), n=3)
+        hint = " — did you mean: {}?".format(", ".join(close)) if close else                " — available types: {}".format(", ".join(sorted(known)))
+        return hint
+    return known, suggest
 
 
 def load_rubric(path):
@@ -56,49 +76,112 @@ def load_rubric(path):
         data = yaml.safe_load(fh)
     if not isinstance(data, dict) or "tasks" not in data:
         raise RubricError("rubric must be a mapping with a 'tasks' list")
+    known, suggest = _known_check_types()
     for i, task in enumerate(data["tasks"]):
         if "id" not in task or "weight" not in task:
             raise RubricError("task #{} needs 'id' and 'weight'".format(i + 1))
         for chk in task.get("checks", []):
             if "type" not in chk:
                 raise RubricError("check without 'type' in task {}".format(task["id"]))
-            if "construct" not in chk:      # probe checks are validated at run time
-                get_check(chk["type"])      # raises on unknown static/dynamic types
-    data.setdefault("settings", {})
+            if "construct" not in chk and chk["type"] not in known:
+                raise RubricError("unknown check type '{}' in task {}{}".format(
+                    chk["type"], task.get("id", i + 1), suggest(chk["type"])))
+    settings = data.setdefault("settings", {})
+    # Lab 03 dialect: a dynamic_runner section maps onto engine settings
+    dr = data.get("dynamic_runner") or {}
+    if dr.get("timeout_seconds"):
+        settings.setdefault("timeout_s", dr["timeout_seconds"])
+    if dr.get("ignore_case_in_stdout"):
+        settings["stdout_ignorecase"] = True
+    # multi-file penalty from global_rules
+    gr = data.get("global_rules") or {}
+    if gr.get("multi_file_deduction") is not None:
+        settings["multi_file_deduction"] = abs(float(gr["multi_file_deduction"]))
     return data
 
 
 def _probe_of(check):
-    """Functional checks declare construct/call/set_expr + expect."""
+    """Build worker probe(s) from a functional check. Returns a list —
+    some checks expand into one probe per method."""
+    ctype = check["type"]
+    cid = check["id"]
     expect = check.get("expect", "ok")
-    return {
-        "id": check["id"],
-        "construct": check["construct"],
-        "call": check.get("call"),
-        "set_expr": check.get("set_expr"),
-        "expect": expect,
-        "raises": expect.split(":", 1)[1] if expect.startswith("raises:") else None,
-        "raises_any": expect == "raises_any",
-    }
+
+    def std_probe(pid, construct, call=None, set_expr=None, kind=None,
+                  args=None, steps=None, target=None):
+        pr = {"id": pid, "construct": construct, "call": call,
+              "set_expr": set_expr, "expect": expect,
+              "raises": expect.split(":", 1)[1] if expect.startswith("raises:") else None,
+              "raises_any": expect == "raises_any"}
+        if kind:
+            pr["kind"] = kind
+        if args is not None:
+            pr["args"] = args
+        if steps is not None:
+            pr["steps"] = steps
+        if target is not None:
+            pr["target"] = target
+        return pr
+
+    if ctype == "functional_call_raises":
+        target = chk.get("target")
+        exc = chk.get("expected_exception", "Exception")
+        return [std_probe("{}::{}".format(cid, m), "{}()".format(target),
+                          call="obj.{}()".format(m))
+                for m in chk.get("methods", [])]
+    if ctype == "functional_call_returns":
+        return [std_probe(cid, chk["function"], args=chk.get("args", []),
+                          kind="call_args")]
+    if ctype == "functional_property_test":
+        return [std_probe(cid, chk.get("target"),
+                          steps=chk.get("sequence", []),
+                          kind="sequence")]
+    return [std_probe(cid, check.get("construct"), call=check.get("call"),
+                      set_expr=check.get("set_expr"))]
 
 
 def _eval_dynamic_check(check, run_result):
-    """(passed, detail) for runs_clean / stdout_contains / stdout_regex."""
+    """(passed, detail) for runs_clean / stdout_contains / stdout_regex /
+    stdout_contains_pattern / dynamic_execution."""
     ctype = check["type"]
+    flags = re.IGNORECASE if check.get("stdout_ignorecase") else 0
     if ctype == "runs_clean":
         if run_result["crash"]:
             return False, "crashes: {}".format(run_result["crash"])
         return True, "executes cleanly ({:.1f}s)".format(
             run_result["duration_ms"] / 1000.0)
-    if ctype in ("stdout_contains", "stdout_regex"):
+    if ctype in ("stdout_contains",):
         out = run_result["stdout_tail"]
         if run_result["crash"] and not out:
             return False, "no output — crashed ({})".format(run_result["crash"])
-        if ctype == "stdout_contains":
-            needle = check.get("text", "")
-            return (needle in out), "expected '{}' in output".format(needle)
-        return (bool(re.search(check["pattern"], out)),
-                "expected output /{}/".format(check["pattern"]))
+        needle = check.get("text", "")
+        return (needle in out), "expected '{}' in output".format(needle)
+    if ctype in ("stdout_regex", "stdout_contains_pattern"):
+        out = run_result["stdout_tail"]
+        if run_result["crash"] and not out:
+            return False, "no output — crashed ({})".format(run_result["crash"])
+        ok = bool(re.search(check["pattern"], out, flags))
+        return ok, ("pattern matched" if ok else
+                    "expected output /{}/ not found in simulation log".format(
+                        check["pattern"]))
+    if ctype == "dynamic_execution":
+        seq = check.get("expected_action_sequence") or []
+        if check.get("stdout_ignorecase"):
+            seq = [t.lower() for t in seq]
+        out = run_result["stdout_tail"]
+        if check.get("stdout_ignorecase"):
+            out = out.lower()
+        if run_result["crash"] and not out:
+            return False, "no output — crashed ({})".format(run_result["crash"])
+        pos = 0
+        for token in seq:
+            i = out.find(token, pos)
+            if i < 0:
+                return False, (
+                    "expected action '{}' not found in order in the printed "
+                    "simulation log (from position {})".format(token, pos))
+            pos = i + len(token)
+        return True, "expected action sequence found in order in the log"
     return False, "unknown dynamic check"
 
 
@@ -110,6 +193,31 @@ def _eval_probe(check, probe_result):
     if status == "construct_error":
         return False, "could not build {} — {}".format(
             check.get("construct", "object"), probe_result.get("detail", ""))
+    if probe_result.get("kind") == "sequence":
+        if status == "ok":
+            return True, "property sequence held"
+        return False, probe_result.get("detail", "sequence failed")
+    if probe_result.get("kind") == "call_args":
+        if status == "raised":
+            return False, "unexpected exception {}: {}".format(
+                probe_result.get("exc"), probe_result.get("detail", ""))
+        val = probe_result.get("value")
+        em = check.get("expected_match") or {}
+        if em:
+            idx = em.get("index")
+            got = val[idx] if isinstance(val, list) and idx < len(val) else None
+            want = em.get("value")
+            if isinstance(want, bool):
+                if not (isinstance(got, bool) and got == want):
+                    return False, "result[{}] = {!r}, expected {!r}".format(idx, got, want)
+            elif got != want:
+                return False, "result[{}] = {!r}, expected {!r}".format(idx, got, want)
+        reasons = check.get("expected_reason_contains") or []
+        if reasons:
+            blob = json.dumps(val).lower() if not isinstance(val, str) else val.lower()
+            if not any(str(r).lower() in blob for r in reasons):
+                return False, "reason string did not contain any of {}".format(list(reasons))
+        return True, "ok"
     if expect == "raises_any":
         if status == "raised":
             return True, "raised {} as expected".format(probe_result.get("exc"))
@@ -396,6 +504,52 @@ class _AliasTransformer(ast.NodeTransformer):
         return node
 
 
+def _eval_probe_group(check, probe_results):
+    """Evaluate a check that expanded into one or more probes: every probe
+    must pass. Expected exception names accept the structurally bound
+    student name as well as the required name."""
+    aliases = check.get("aliases") or {}
+    for pr in probe_results:
+        status = pr.get("status")
+        if status == "error":
+            return False, "module could not load for probing"
+        if status == "construct_error":
+            return False, "could not build {} — {}".format(
+                check.get("target") or check.get("construct", "object"),
+                pr.get("detail", ""))
+        if check["type"] == "functional_call_raises":
+            want = check.get("expected_exception", "Exception")
+            exc = pr.get("exc")
+            if status != "raised":
+                return False, check.get("fail", "no exception raised (method did not guard this case)")
+            if exc not in (want, aliases.get(want)):
+                return False, "raised {} instead of {}".format(exc, want)
+        elif check["type"] == "functional_property_test":
+            if status != "ok":
+                return False, pr.get("detail", "property sequence failed")
+        elif check["type"] == "functional_call_returns":
+            if status == "raised":
+                return False, "unexpected exception {}: {}".format(
+                    pr.get("exc"), pr.get("detail", ""))
+            val = pr.get("value")
+            em = check.get("expected_match") or {}
+            if em:
+                idx = em.get("index")
+                got = val[idx] if isinstance(val, list) and idx < len(val) else None
+                want = em.get("value")
+                if isinstance(want, bool):
+                    if not (isinstance(got, bool) and got == want):
+                        return False, "result[{}] = {!r}, expected {!r}".format(idx, got, want)
+                elif got != want:
+                    return False, "result[{}] = {!r}, expected {!r}".format(idx, got, want)
+            reasons = check.get("expected_reason_contains") or []
+            if reasons:
+                blob = json.dumps(val).lower()
+                if not any(str(r).lower() in blob for r in reasons):
+                    return False, "reason did not contain any of {}".format(list(reasons))
+    return True, "all probes passed"
+
+
 def grade_submission(path, src, rubric):
     """Returns {task_scores: {id: score}, failed: [(task_id, deduct, detail)],
     penalties: [(amount, reason)], final: float, crash: str|None,
@@ -419,12 +573,16 @@ def grade_submission(path, src, rubric):
 
     # ---- one sandbox run carrying every dynamic/functional probe ---------
     probes, dynamic_checks = [], []
+    probe_owner = {}     # probe id -> (task_id, chk)
     for task in rubric["tasks"]:
         for chk in task.get("checks", []):
-            if chk["type"] in _DYNAMIC_TYPES:
+            ctype = chk["type"]
+            if ctype in _DYNAMIC_TYPES:
                 dynamic_checks.append((task["id"], chk))
-            elif chk["type"] not in _STATIC_TYPES:
-                probes.append(_probe_of(chk))
+            elif ctype in _PROBE_TYPES:
+                for pr in _probe_of(chk):
+                    probes.append(pr)
+                    probe_owner[pr["id"]] = (task["id"], chk)
                 dynamic_checks.append((task["id"], chk))
 
     run_result = {"crash": None, "stdout_tail": "", "duration_ms": 0,
@@ -438,19 +596,30 @@ def grade_submission(path, src, rubric):
     for task in rubric["tasks"]:
         for chk in task.get("checks", []):
             ctype = chk["type"]
+            if ctype in _STATIC_ALIASES:
+                ctype = _STATIC_ALIASES[ctype]
+                chk = {**chk, "type": ctype}
             deduct = float(chk.get("deduct", 0))
             try:
                 if aliases and ctype in ("regex_present", "forbidden_pattern",
                                          "comment_regex_present"):
                     chk = {**chk, "aliases": aliases}
+                if chk.get("stdout_ignorecase") is None:
+                    chk = {**chk, "stdout_ignorecase":
+                           bool(settings.get("stdout_ignorecase"))}
                 if ctype in _STATIC_TYPES:
                     passed, detail = get_check(ctype)(tree, src, chk)
                 elif ctype in _DYNAMIC_TYPES:
                     passed, detail = _eval_dynamic_check(chk, run_result)
+                elif ctype in _PROBE_TYPES:
+                    probe_results = [run_result["probes"].get(
+                        pid, {"status": "error", "detail": "probe missing"})
+                        for pid in sorted(pr["id"] for pr in probes
+                                          if pr["id"].startswith(chk["id"] + "::")
+                                          or pr["id"] == chk["id"])]
+                    passed, detail = _eval_probe_group(chk, probe_results)
                 else:
-                    probe_result = run_result["probes"].get(
-                        chk["id"], {"status": "error", "detail": "probe missing"})
-                    passed, detail = _eval_probe(chk, probe_result)
+                    passed, detail = False, "unknown check type '{}'".format(ctype)
             except Exception as exc:      # a broken check must not kill grading
                 passed, detail = False, "check error: {}".format(exc)
             if not passed:
@@ -501,9 +670,11 @@ def grade_batch(files_by_roll, rubric):
         for task_id, deduct, detail in best["failed"]:
             report_bits.append("{}: -{} ({})".format(task_id, deduct, detail))
         if len(entries) > 1:
-            penalties += -2.0
-            report_bits.append("multi-file submission ({} files): -2.0".format(
-                len(entries)))
+            mf = abs(float(rubric.get("settings", {}).get(
+                "multi_file_deduction", 2.0)))
+            penalties += -mf
+            report_bits.append("multi-file submission ({} files): -{:.1f}".format(
+                len(entries), mf))
         if best["crash"]:
             report_bits.append("runtime: {}".format(best["crash"]))
         final = max(0.0, best["final"] + penalties)

@@ -1,0 +1,223 @@
+# CopCat rubric - AI Lab 03: Data Structures (Stacks & Queues) & Reflex Agents
+# Written in the extended check dialect (sequence probes, hierarchy checks,
+# dynamic action-sequence verification, alias-aware patterns).
+
+lab: ai_lab03
+title: "Data Structures (Stacks & Queues) & Reflex Agents"
+total_marks: 10.0
+
+global_rules:
+  single_file: true
+  multi_file_deduction: 2.0
+  filename_patterns:
+    - "^(bscs|bsai)25[0-9]{3}_ai_lab03\\.py$"
+
+dynamic_runner:
+  timeout_seconds: 10
+  mock_stdin: true
+  ignore_case_in_stdout: true
+  catch_infinite_loops: true
+
+tasks:
+  - id: T1
+    title: "The Undo-Redo & State History Manager (Stack with Min-Tracking)"
+    weight: 2.0
+    checks:
+      - id: stack_no_deque
+        type: forbidden_import_or_usage
+        target: "collections.deque"
+        scope: "Stack"
+        deduct: 0.5
+        message: "Stack must not use collections.deque"
+
+      - id: custom_exception_def
+        type: exception_hierarchy
+        base: "Exception"
+        subclasses: ["StackUnderflowError"]
+        deduct: 0.3
+        message: "StackUnderflowError must inherit from Exception"
+
+      - id: min_tracking_aux_stack
+        type: instance_attrs
+        class: "Stack"
+        attrs: ["_min_stack"]
+        structural_fallback: true
+        deduct: 0.4
+        message: "Must use an auxiliary tracking stack (_min_stack) for O(1) minimum tracking"
+
+      - id: underflow_handling
+        type: functional_call_raises
+        target: "Stack"
+        methods: ["pop", "peek", "get_min"]
+        on_state: "empty"
+        expected_exception: "StackUnderflowError"
+        deduct: 0.4
+        message: "pop(), peek(), and get_min() must raise StackUnderflowError on empty stack"
+
+      - id: min_tracking_accuracy
+        type: functional_property_test
+        target: "Stack"
+        sequence:
+          - push: [15, 8, 20, 5, 12]
+          - assert_min: 5
+          - pop: 12
+          - pop: 5
+          - assert_min: 8
+        deduct: 0.4
+        message: "get_min() returned incorrect values after push/pop sequences"
+
+  - id: T2
+    title: "Syntax & Knowledge Representation Validator"
+    weight: 2.0
+    checks:
+      - id: uses_custom_stack
+        type: ast_uses_class
+        function: "is_syntax_balanced"
+        required_class: "Stack"
+        deduct: 0.4
+        message: "is_syntax_balanced must utilize the custom Stack class from Task 1"
+
+      - id: valid_expression_output
+        type: functional_call_returns
+        function: "is_syntax_balanced"
+        args: ["(A & [B | {C -> D}])"]
+        expected_match:
+          index: 0
+          value: true
+        deduct: 0.4
+        message: "Failed to validate a correctly balanced expression"
+
+      - id: premature_closing_detection
+        type: functional_call_returns
+        function: "is_syntax_balanced"
+        args: ["]A + B["]
+        expected_match:
+          index: 0
+          value: false
+        expected_reason_contains: ["premature", "no matching opener", "empty"]
+        deduct: 0.4
+        message: "Failed to accurately detect and report premature closing delimiter"
+
+      - id: mismatched_closing_detection
+        type: functional_call_returns
+        function: "is_syntax_balanced"
+        args: ["([A + B) * C]"]
+        expected_match:
+          index: 0
+          value: false
+        expected_reason_contains: ["mismatch", "closed by"]
+        deduct: 0.4
+        message: "Failed to accurately detect and report mismatched bracket pair"
+
+      - id: unclosed_delimiter_detection
+        type: functional_call_returns
+        function: "is_syntax_balanced"
+        args: ["((P & Q) -> R"]
+        expected_match:
+          index: 0
+          value: false
+        expected_reason_contains: ["unclosed", "opening"]
+        deduct: 0.4
+        message: "Failed to accurately detect and report unclosed delimiter at string termination"
+
+  - id: T3
+    title: "Simple Reflex Vacuum Cleaner Agent"
+    weight: 2.0
+    checks:
+      - id: simple_reflex_class_structure
+        type: method_exists
+        class: "SimpleReflexAgent"
+        methods: ["act"]
+        deduct: 0.4
+        message: "SimpleReflexAgent must define an act(percept) method"
+
+      - id: condition_action_purity
+        type: forbidden_instance_attrs
+        class: "SimpleReflexAgent"
+        attrs: ["model", "memory", "history", "state"]
+        deduct: 0.6
+        message: "SimpleReflexAgent must be completely memoryless and follow condition-action rules"
+
+      - id: environment_score_model
+        type: dynamic_execution
+        target: "TwoRoomEnvironment"
+        expected_action_sequence: ["Suck", "Right", "Left", "Right", "Left"]
+        deduct: 0.5
+        message: "TwoRoomEnvironment scoring incorrect (+10 for Suck, -1 for move)"
+
+      - id: fatal_flaw_demonstration
+        type: stdout_contains_pattern
+        pattern: "(Step 0[4-7].*(Left|Right).*Score: (1[5-8]|19)){2,}"
+        deduct: 0.5
+        message: "Output/simulation must demonstrate oscillation and score degradation once clean"
+
+  - id: T4
+    title: "Model-Based Reflex Agent with State Memory"
+    weight: 2.0
+    checks:
+      - id: internal_state_structure
+        type: instance_attrs
+        class: "ModelBasedReflexAgent"
+        attrs: ["model", "last_action"]
+        structural_fallback: true
+        deduct: 0.4
+        message: "ModelBasedReflexAgent must maintain internal state model and last_action"
+
+      - id: update_state_method
+        type: method_exists
+        class: "ModelBasedReflexAgent"
+        methods: ["update_state", "act"]
+        deduct: 0.4
+        message: "Missing update_state or act methods in ModelBasedReflexAgent"
+
+      - id: state_tracking_logic
+        type: functional_property_test
+        target: "ModelBasedReflexAgent"
+        lifecycle: true
+        sequence:
+          - initial_model: {"A": "Unknown", "B": "Unknown"}
+          - step_1_percept: ["A", "Dirty"]
+          - step_1_action: "Suck"
+          - expected_model_step_1: {"A": "Dirty"}
+          - step_2_percept: ["A", "Clean"]
+          - expected_model_step_2: {"A": "Clean"}
+        deduct: 0.6
+        message: "update_state failed to properly update sensor status or transition model after Suck"
+
+      - id: optimal_halting
+        type: stdout_contains_pattern
+        pattern: "Step 0?4.*Action: NoOp.*(19|Target Achieved|Halted)"
+        deduct: 0.6
+        message: "Agent must output NoOp and halt at Step 4 with optimal score (19) when all rooms clean"
+
+  - id: T5
+    title: "Comparative Evaluation & 3-Room Benchmark"
+    weight: 2.0
+    checks:
+      - id: three_room_classes
+        type: class_exists
+        classes: ["ThreeRoomEnvironment", "ThreeRoomModelBasedAgent"]
+        structural_fallback: true
+        deduct: 0.4
+        message: "Must implement ThreeRoomEnvironment and ThreeRoomModelBasedAgent"
+
+      - id: three_room_model_init
+        type: instance_attrs
+        class: "ThreeRoomModelBasedAgent"
+        attrs: ["model"]
+        structural_fallback: true
+        deduct: 0.4
+        message: "ThreeRoomModelBasedAgent model must track rooms A, B, and C"
+
+      - id: systematic_linear_navigation
+        type: dynamic_execution
+        target: "ThreeRoomEnvironment"
+        expected_action_sequence: ["Suck", "Right", "Right", "Suck", "NoOp"]
+        deduct: 0.6
+        message: "Agent failed to execute optimal navigation path across linear topology (A <-> B <-> C)"
+
+      - id: three_room_optimal_score
+        type: stdout_contains_pattern
+        pattern: "Step 0?5.*Action: NoOp.*(18|Optimal Termination)"
+        deduct: 0.6
+        message: "3-room simulation must terminate at Step 5 with optimal score 18"
