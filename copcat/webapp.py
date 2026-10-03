@@ -32,7 +32,7 @@ WEB_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def _job_dir(job_id):
-    root = os.path.join(tempfile.gettempdir(), "copcat_web")
+    root = os.path.join(os.getcwd(), "copcat_results")
     return os.path.join(root, job_id)
 
 

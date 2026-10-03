@@ -47,8 +47,10 @@ a { color:var(--accent); }
 <h2>1. Upload</h2>
 <div class="drop" id="drop">Drop the <b>submissions ZIP</b> here (Canvas / Classroom / Moodle export, or loose .py files) &mdash; or click to browse
 <input type="file" id="file" hidden></div>
+<div id="uploadinfo" style="margin-top:8px;font-size:13px;color:#27ae60;font-weight:600"></div>
 <div class="row" style="margin-top:12px">
 <label>Rubric (optional, for grading): <input type="file" id="rubric" accept=".yaml,.yml"></label>
+<span id="rubricinfo" style="font-size:13px;color:#27ae60;font-weight:600"></span>
 </div>
 </div>
 
@@ -91,7 +93,19 @@ drop.onclick = () => $("file").click();
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over");
-  if (e.dataTransfer.files.length) $("file").files = e.dataTransfer.files; };
+  if (e.dataTransfer.files.length) { $("file").files = e.dataTransfer.files; showUploadInfo(); } };
+$("file").onchange = showUploadInfo;
+$("rubric").onchange = () => {
+  const r = $("rubric").files[0];
+  $("rubricinfo").textContent = r ? "✓ " + r.name : "";
+};
+
+function showUploadInfo() {
+  const f = $("file").files[0];
+  $("uploadinfo").textContent = f
+    ? "✓ Selected: " + f.name + " (" + (f.size / 1024).toFixed(0) + " KB)"
+    : "";
+}
 
 function run(mode) {
   const f = $("file").files[0];

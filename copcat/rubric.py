@@ -29,6 +29,7 @@ import ast
 import json
 import os
 import re
+import tempfile
 
 from .canon import parse_lenient
 from .checks import get_check
