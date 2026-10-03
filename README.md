@@ -54,6 +54,10 @@ pairs sit at ~1–8%); ≥25% escalates to HIGH.
 - `copcat_audit.txt` — ranked pairs with matched code blocks, evasion
   indicators, clusters, method notes and caveats
 
+## Documentation
+
+Full install/run guide and cheatsheet: [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+
 ## Layout
 
 ```
