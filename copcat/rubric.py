@@ -162,7 +162,11 @@ def _eval_dynamic_check(check, run_result):
         out = run_result["stdout_tail"]
         if run_result["crash"] and not out:
             return False, "no output — crashed ({})".format(run_result["crash"])
-        ok = bool(re.search(check["pattern"], out, flags))
+        # Students format output differently; use DOTALL+MULTILINE so .* can
+        # cross newlines and ^/$ match per-line. Inline (?s)/(?m) in the
+        # pattern itself also works because re.compile honours inline flags.
+        pat_flags = flags | re.DOTALL | re.MULTILINE
+        ok = bool(re.search(check["pattern"], out, pat_flags))
         return ok, ("pattern matched" if ok else
                     "expected output /{}/ not found in simulation log".format(
                         check["pattern"]))

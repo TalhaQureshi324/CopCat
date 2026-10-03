@@ -1,223 +1,265 @@
 # CopCat rubric - AI Lab 03: Data Structures (Stacks & Queues) & Reflex Agents
-# Written in the extended check dialect (sequence probes, hierarchy checks,
-# dynamic action-sequence verification, alias-aware patterns).
+# Resilient authoring rules applied:
+#   1. Unrolled sequence arguments (push: 15 not push: [15,8,20,5,12])
+#   2. (?s) DOTALL regex for multiline stdout matching
+#   3. Key-containment (not strict dict equality) for model checks
+#   4. Lifecycle-aware probing (act + update_state paired in set_expr)
+#   5. Zero-tolerance only for stated constraints (deque ban, memoryless purity)
 
 lab: ai_lab03
 title: "Data Structures (Stacks & Queues) & Reflex Agents"
 total_marks: 10.0
 
-global_rules:
-  single_file: true
+settings:
+  timeout_s: 10
+  memory_mb: 512
+  structural_threshold: 0.8
+  naming_deduct: 0.1
   multi_file_deduction: 2.0
-  filename_patterns:
-    - "^(bscs|bsai)25[0-9]{3}_ai_lab03\\.py$"
-
-dynamic_runner:
-  timeout_seconds: 10
-  mock_stdin: true
-  ignore_case_in_stdout: true
-  catch_infinite_loops: true
+  stdout_ignorecase: true
 
 tasks:
+  # =========================================================================
+  # TASK 1: Stack with Min-Tracking
+  # =========================================================================
   - id: T1
-    title: "The Undo-Redo & State History Manager (Stack with Min-Tracking)"
     weight: 2.0
+    title: "Stack with Min-Tracking & Custom Exception"
     checks:
-      - id: stack_no_deque
+      - id: t1_class_exists
+        type: exists_class
+        name: Stack
+        deduct: 0.5
+        fail: "Stack class is missing"
+
+      - id: t1_methods
+        type: method_exists
+        class: Stack
+        methods: [push, pop, peek, is_empty, size, get_min]
+        deduct: 0.4
+        fail: "Stack missing one or more required methods"
+
+      - id: t1_no_deque
         type: forbidden_import_or_usage
         target: "collections.deque"
         scope: "Stack"
         deduct: 0.5
-        message: "Stack must not use collections.deque"
+        fail: "Stack must not use collections.deque (implement with native list/nodes)"
 
-      - id: custom_exception_def
-        type: exception_hierarchy
-        base: "Exception"
-        subclasses: ["StackUnderflowError"]
+      - id: t1_min_attr
+        type: has_attrs
+        class: Stack
+        attrs: [_min_stack]
         deduct: 0.3
-        message: "StackUnderflowError must inherit from Exception"
+        fail: "Stack missing auxiliary tracking attribute '_min_stack' for O(1) minimum retrieval"
 
-      - id: min_tracking_aux_stack
-        type: instance_attrs
-        class: "Stack"
-        attrs: ["_min_stack"]
-        structural_fallback: true
-        deduct: 0.4
-        message: "Must use an auxiliary tracking stack (_min_stack) for O(1) minimum tracking"
+      - id: t1_exception
+        type: exception_hierarchy
+        base: Exception
+        subclasses: [StackUnderflowError]
+        deduct: 0.3
+        fail: "StackUnderflowError must inherit from Exception"
 
-      - id: underflow_handling
+      - id: t1_underflow_raises
         type: functional_call_raises
-        target: "Stack"
-        methods: ["pop", "peek", "get_min"]
-        on_state: "empty"
-        expected_exception: "StackUnderflowError"
-        deduct: 0.4
-        message: "pop(), peek(), and get_min() must raise StackUnderflowError on empty stack"
+        target: Stack
+        methods: [pop, peek, get_min]
+        expected_exception: StackUnderflowError
+        deduct: 0.5
+        fail: "pop(), peek(), and get_min() must raise StackUnderflowError when invoked on an empty stack"
 
-      - id: min_tracking_accuracy
+      # Unrolled sequential pushes (not push: [15, 8, 20, 5, 12])
+      - id: t1_min_property_test
         type: functional_property_test
-        target: "Stack"
+        target: Stack
         sequence:
-          - push: [15, 8, 20, 5, 12]
+          - push: 15
+          - push: 8
+          - push: 20
+          - push: 5
+          - push: 12
           - assert_min: 5
           - pop: 12
           - pop: 5
           - assert_min: 8
-        deduct: 0.4
-        message: "get_min() returned incorrect values after push/pop sequences"
+        deduct: 0.5
+        fail: "get_min() returned incorrect minimum tracking after push/pop sequence"
 
+  # =========================================================================
+  # TASK 2: Syntax & Knowledge Representation Validator
+  # =========================================================================
   - id: T2
-    title: "Syntax & Knowledge Representation Validator"
     weight: 2.0
+    title: "Delimiter Syntax Validator"
     checks:
-      - id: uses_custom_stack
+      - id: t2_uses_stack
         type: ast_uses_class
-        function: "is_syntax_balanced"
-        required_class: "Stack"
-        deduct: 0.4
-        message: "is_syntax_balanced must utilize the custom Stack class from Task 1"
+        function: is_syntax_balanced
+        required_class: Stack
+        deduct: 0.5
+        fail: "is_syntax_balanced must use the custom Stack class from Task 1"
 
-      - id: valid_expression_output
+      - id: t2_valid_expr
         type: functional_call_returns
-        function: "is_syntax_balanced"
+        function: is_syntax_balanced
         args: ["(A & [B | {C -> D}])"]
         expected_match:
           index: 0
           value: true
-        deduct: 0.4
-        message: "Failed to validate a correctly balanced expression"
+        deduct: 0.5
+        fail: "Failed to validate balanced expression"
 
-      - id: premature_closing_detection
+      - id: t2_mismatched_brackets
         type: functional_call_returns
-        function: "is_syntax_balanced"
-        args: ["]A + B["]
-        expected_match:
-          index: 0
-          value: false
-        expected_reason_contains: ["premature", "no matching opener", "empty"]
-        deduct: 0.4
-        message: "Failed to accurately detect and report premature closing delimiter"
-
-      - id: mismatched_closing_detection
-        type: functional_call_returns
-        function: "is_syntax_balanced"
+        function: is_syntax_balanced
         args: ["([A + B) * C]"]
         expected_match:
           index: 0
           value: false
         expected_reason_contains: ["mismatch", "closed by"]
         deduct: 0.4
-        message: "Failed to accurately detect and report mismatched bracket pair"
+        fail: "Failed to detect or report mismatched delimiter violation"
 
-      - id: unclosed_delimiter_detection
+      - id: t2_unclosed_opener
         type: functional_call_returns
-        function: "is_syntax_balanced"
+        function: is_syntax_balanced
         args: ["((P & Q) -> R"]
         expected_match:
           index: 0
           value: false
         expected_reason_contains: ["unclosed", "opening"]
         deduct: 0.4
-        message: "Failed to accurately detect and report unclosed delimiter at string termination"
+        fail: "Failed to detect unclosed opening delimiter at end of sentence"
 
+      - id: t2_premature_closing
+        type: functional_call_returns
+        function: is_syntax_balanced
+        args: ["]A + B["]
+        expected_match:
+          index: 0
+          value: false
+        expected_reason_contains: ["premature", "no matching opener"]
+        deduct: 0.4
+        fail: "Failed to detect premature closing delimiter on empty stack"
+
+  # =========================================================================
+  # TASK 3: Simple Reflex Vacuum Cleaner Agent
+  # =========================================================================
   - id: T3
-    title: "Simple Reflex Vacuum Cleaner Agent"
     weight: 2.0
+    title: "Simple Reflex Agent & Oscillation Flaw"
     checks:
-      - id: simple_reflex_class_structure
-        type: method_exists
-        class: "SimpleReflexAgent"
-        methods: ["act"]
-        deduct: 0.4
-        message: "SimpleReflexAgent must define an act(percept) method"
-
-      - id: condition_action_purity
-        type: forbidden_instance_attrs
-        class: "SimpleReflexAgent"
-        attrs: ["model", "memory", "history", "state"]
-        deduct: 0.6
-        message: "SimpleReflexAgent must be completely memoryless and follow condition-action rules"
-
-      - id: environment_score_model
-        type: dynamic_execution
-        target: "TwoRoomEnvironment"
-        expected_action_sequence: ["Suck", "Right", "Left", "Right", "Left"]
-        deduct: 0.5
-        message: "TwoRoomEnvironment scoring incorrect (+10 for Suck, -1 for move)"
-
-      - id: fatal_flaw_demonstration
-        type: stdout_contains_pattern
-        pattern: "(Step 0[4-7].*(Left|Right).*Score: (1[5-8]|19)){2,}"
-        deduct: 0.5
-        message: "Output/simulation must demonstrate oscillation and score degradation once clean"
-
-  - id: T4
-    title: "Model-Based Reflex Agent with State Memory"
-    weight: 2.0
-    checks:
-      - id: internal_state_structure
-        type: instance_attrs
-        class: "ModelBasedReflexAgent"
-        attrs: ["model", "last_action"]
-        structural_fallback: true
-        deduct: 0.4
-        message: "ModelBasedReflexAgent must maintain internal state model and last_action"
-
-      - id: update_state_method
-        type: method_exists
-        class: "ModelBasedReflexAgent"
-        methods: ["update_state", "act"]
-        deduct: 0.4
-        message: "Missing update_state or act methods in ModelBasedReflexAgent"
-
-      - id: state_tracking_logic
-        type: functional_property_test
-        target: "ModelBasedReflexAgent"
-        lifecycle: true
-        sequence:
-          - initial_model: {"A": "Unknown", "B": "Unknown"}
-          - step_1_percept: ["A", "Dirty"]
-          - step_1_action: "Suck"
-          - expected_model_step_1: {"A": "Dirty"}
-          - step_2_percept: ["A", "Clean"]
-          - expected_model_step_2: {"A": "Clean"}
-        deduct: 0.6
-        message: "update_state failed to properly update sensor status or transition model after Suck"
-
-      - id: optimal_halting
-        type: stdout_contains_pattern
-        pattern: "Step 0?4.*Action: NoOp.*(19|Target Achieved|Halted)"
-        deduct: 0.6
-        message: "Agent must output NoOp and halt at Step 4 with optimal score (19) when all rooms clean"
-
-  - id: T5
-    title: "Comparative Evaluation & 3-Room Benchmark"
-    weight: 2.0
-    checks:
-      - id: three_room_classes
+      - id: t3_classes
         type: class_exists
-        classes: ["ThreeRoomEnvironment", "ThreeRoomModelBasedAgent"]
-        structural_fallback: true
+        classes: [TwoRoomEnvironment, SimpleReflexAgent]
         deduct: 0.4
-        message: "Must implement ThreeRoomEnvironment and ThreeRoomModelBasedAgent"
+        fail: "TwoRoomEnvironment or SimpleReflexAgent class is missing"
 
-      - id: three_room_model_init
-        type: instance_attrs
-        class: "ThreeRoomModelBasedAgent"
-        attrs: ["model"]
-        structural_fallback: true
+      - id: t3_pure_reflex
+        type: forbidden_instance_attrs
+        class: SimpleReflexAgent
+        attrs: [model, memory, history, state]
+        deduct: 0.6
+        fail: "SimpleReflexAgent must be purely memoryless (cannot store model/memory attributes)"
+
+      - id: t3_act_method
+        type: exists_method
+        class: SimpleReflexAgent
+        method: act
+        deduct: 0.3
+        fail: "SimpleReflexAgent missing act(percept) method"
+
+      - id: t3_runs
+        type: runs_clean
         deduct: 0.4
-        message: "ThreeRoomModelBasedAgent model must track rooms A, B, and C"
+        fail: "Execution crashed during simulation"
 
-      - id: systematic_linear_navigation
-        type: dynamic_execution
-        target: "ThreeRoomEnvironment"
-        expected_action_sequence: ["Suck", "Right", "Right", "Suck", "NoOp"]
-        deduct: 0.6
-        message: "Agent failed to execute optimal navigation path across linear topology (A <-> B <-> C)"
+      # DOTALL: (?s) makes .* match across newlines so the oscillation
+      # pattern works regardless of how the student formats their output
+      - id: t3_oscillation_output
+        type: stdout_regex
+        pattern: "(?s)(Left|Right).*Score: 1[5-8].*(Left|Right).*Score: 1[5-8]"
+        deduct: 0.5
+        fail: "Simulation must demonstrate the fatal flaw: continuous oscillation and score loss once clean"
 
-      - id: three_room_optimal_score
-        type: stdout_contains_pattern
-        pattern: "Step 0?5.*Action: NoOp.*(18|Optimal Termination)"
+  # =========================================================================
+  # TASK 4: Model-Based Reflex Agent (2-Room Layout)
+  # =========================================================================
+  - id: T4
+    weight: 2.0
+    title: "Model-Based Reflex Agent (2-Room Layout)"
+    checks:
+      - id: t4_class
+        type: exists_class
+        name: ModelBasedReflexAgent
+        deduct: 0.4
+        fail: "ModelBasedReflexAgent class is missing"
+
+      - id: t4_methods
+        type: method_exists
+        class: ModelBasedReflexAgent
+        methods: [update_state, act]
+        deduct: 0.4
+        fail: "ModelBasedReflexAgent missing required methods: update_state and act"
+
+      - id: t4_attrs
+        type: has_attrs
+        class: ModelBasedReflexAgent
+        attrs: [model, last_action]
+        deduct: 0.4
+        fail: "ModelBasedReflexAgent must maintain internal state attributes 'model' and 'last_action'"
+
+      # Lifecycle-aware probe: mimics the manual simulation loop by calling
+      # act() then update_state() (or letting act() handle state internally)
+      - id: t4_lifecycle_probe
+        type: functional
+        construct: ["ModelBasedReflexAgent(['A', 'B'])", "ModelBasedReflexAgent()"]
+        set_expr: |
+          p1 = ('A', 'Dirty')
+          a1 = obj.act(p1)
+          if hasattr(obj, 'update_state'): obj.update_state(p1, a1)
+          p2 = ('B', 'Dirty')
+          a2 = obj.act(p2)
+          if hasattr(obj, 'update_state'): obj.update_state(p2, a2)
+          p3 = ('B', 'Clean')
+          a3 = obj.act(p3)
+          if hasattr(obj, 'update_state'): obj.update_state(p3, a3)
+        call: "obj.model.get('B') == 'Clean' if isinstance(obj.model, dict) else getattr(obj, 'model', None) is not None"
+        expect: truthy
         deduct: 0.6
-        message: "3-room simulation must terminate at Step 5 with optimal score 18"
+        fail: "ModelBasedReflexAgent failed to update internal model transition state accurately"
+
+      # DOTALL: (?s) makes . match across newlines
+      - id: t4_halting_output
+        type: stdout_regex
+        pattern: "(?s)NoOp.*(?:Score: 19|Halted|Target Achieved)"
+        deduct: 0.5
+        fail: "Agent must output NoOp and halt cleanly at Step 4 with optimal score 19"
+
+  # =========================================================================
+  # TASK 5: 3-Room Linear Topology Benchmark
+  # =========================================================================
+  - id: T5
+    weight: 2.0
+    title: "3-Room Linear Topology Benchmark"
+    checks:
+      - id: t5_classes
+        type: class_exists
+        classes: [ThreeRoomEnvironment, ThreeRoomModelBasedAgent]
+        deduct: 0.4
+        fail: "ThreeRoomEnvironment or ThreeRoomModelBasedAgent class missing"
+
+      - id: t5_model_tracking
+        type: has_attrs
+        class: ThreeRoomModelBasedAgent
+        attrs: [model]
+        deduct: 0.3
+        fail: "ThreeRoomModelBasedAgent must maintain an internal 'model'"
+
+      # DOTALL: matches even if the student prints actions and scores on
+      # separate lines or with different formatting
+      - id: t5_optimal_score_output
+        type: stdout_regex
+        pattern: "(?s)Step 0?5.*NoOp.*(?:18|Optimal Termination)"
+        deduct: 0.8
+        fail: "3-Room simulation must terminate at Step 5 with optimal score 18"

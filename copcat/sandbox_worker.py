@@ -168,8 +168,11 @@ def main():
 def _run_sequence(obj, steps):
     """Generic step runner supporting two dialects.
 
-    1. method-call steps: {method: args-list-or-scalar} calls obj.method;
-       {assert_attr: expected} asserts obj.attr() == expected
+    1. method-call steps: {method: args-list-or-scalar}
+       - signature-aware: if the method takes 0 params (besides self), call
+         with no args and assert the return value == scalar
+       - if it takes params, pass the scalar/list as arguments
+       - {assert_attr: expected} asserts obj.attr() == expected
     2. lifecycle steps (model-based agents):
        {initial_model: {...}}                       -> obj.model = {...}
        {step_N_percept: [...]}                      -> obj.update_state(...)
@@ -178,6 +181,7 @@ def _run_sequence(obj, steps):
     Returns a list of failure strings (empty = pass).
     """
     import re as _re
+    import inspect as _inspect
     failures, percepts = [], {}
     for step in steps:
         if not isinstance(step, dict) or len(step) != 1:
@@ -219,8 +223,41 @@ def _run_sequence(obj, steps):
                 failures.append("{}() = {!r}, expected {!r}".format(
                     m.group(1), actual, val))
             continue
-        args = val if isinstance(val, list) else [val]
-        getattr(obj, key)(*args)
+
+        # ---- generic method call: signature-aware disambiguation ---------
+        # If the method takes 0 params (besides self), call with no args and
+        # assert the return value == val (e.g. pop: 12 -> pop() should return 12).
+        # If it takes params, pass val as argument(s) (e.g. push: 15 -> push(15)).
+        method = getattr(obj, key, None)
+        if method is None:
+            failures.append("method '{}' not found on object".format(key))
+            continue
+        try:
+            sig = _inspect.signature(method)
+            params = [p for p in sig.parameters.values()
+                      if p.name not in ("self", "cls")]
+            if len(params) == 0:
+                actual = method()
+                if actual != val:
+                    failures.append("{}() = {!r}, expected {!r}".format(
+                        key, actual, val))
+            elif len(params) == 1:
+                if isinstance(val, list):
+                    method(*val)
+                else:
+                    method(val)
+            else:
+                if isinstance(val, list):
+                    method(*val)
+                else:
+                    method(val)
+        except TypeError as exc:
+            if "argument" in str(exc):
+                failures.append("{}: argument mismatch ({})".format(key, exc))
+            else:
+                raise
+        except BaseException as exc:
+            failures.append("{} raised {}: {}".format(key, type(exc).__name__, exc))
     return failures
 
 
