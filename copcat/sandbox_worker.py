@@ -3,8 +3,11 @@ grader). Reads a JSON spec on stdin, imports the student submission,
 executes functional probes, prints a JSON result.
 
 Hostile-input defenses applied here:
-* builtins.input is monkeypatched to raise EOFError (interactive menu
-  submissions can't hang the grader waiting for text)
+* builtins.input is monkeypatched to return values from a mock queue
+  (interactive menu submissions run to completion instead of hanging);
+  when the queue is exhausted, input() returns "" — scripts that loop
+  on input() will still terminate because the mock returns immediately
+  (no I/O blocking), and the parent's timeout is the backstop
 * stdin is /dev/null, cwd is a throwaway temp dir
 * the parent additionally enforces timeout + memory via a Windows Job
   Object / POSIX rlimits (see sandbox.py)
@@ -21,16 +24,38 @@ import tempfile
 import time
 import traceback
 
+_mock_input_queue = []
+_mock_input_index = 0
 
-def _blocked_input(prompt="", /):
-    raise EOFError("input() is disabled inside the CopCat sandbox")
+
+def _mock_input(prompt="", /):
+    """Return sequential mock values so top-level input() calls don't
+    crash the module. Returns numeric strings first (int(input()) works),
+    then generic strings, then "" forever."""
+    global _mock_input_index
+    if _mock_input_index < len(_mock_input_queue):
+        val = _mock_input_queue[_mock_input_index]
+        _mock_input_index += 1
+        return val
+    # queue exhausted: return "" immediately (no blocking)
+    return ""
+
+
+def _install_mock_input(mock_inputs):
+    global _mock_input_queue, _mock_input_index
+    _mock_input_queue = list(mock_inputs or [])
+    _mock_input_index = 0
+    builtins.input = _mock_input
 
 
 def main():
     spec = json.loads(sys.stdin.read())
     result = {"crash": None, "stdout_tail": "", "duration_ms": 0, "probes": {}}
 
-    builtins.input = _blocked_input
+    _install_mock_input(spec.get("mock_inputs") or [
+        "10", "20", "30", "5", "500", "250", "300", "150", "250", "1000",
+        "25", "40", "34", "1", "2", "3",
+    ])
     sys.stdin = open(os.devnull, "r")
     os.chdir(tempfile.mkdtemp(prefix="copcat_sbx_"))
 

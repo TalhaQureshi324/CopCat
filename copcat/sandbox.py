@@ -82,18 +82,21 @@ class _WinJob:
             self.handle = None
 
 
-def run_sandboxed(path, probes, timeout_s=15.0, memory_mb=512, aliases=None):
+def run_sandboxed(path, probes, timeout_s=15.0, memory_mb=512, aliases=None,
+                  mock_inputs=None):
     """Import `path` in the sandbox and run functional probes.
 
     probes: [{id, construct, call?, set_expr?}]
     aliases: {required_name: student_name} - structural interface bindings
+    mock_inputs: list of strings returned by input() in order (then "")
     Returns {crash, stdout_tail, duration_ms, probes:{id:{status,...}}}
     """
     worker = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "sandbox_worker.py")
     spec = {"path": os.path.abspath(path), "probes": probes,
             "workdir": os.path.abspath(path),
-            "aliases": aliases or {}}
+            "aliases": aliases or {},
+            "mock_inputs": mock_inputs or []}
     job = None
     preexec = None
     creationflags = 0

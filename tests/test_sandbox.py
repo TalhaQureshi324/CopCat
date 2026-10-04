@@ -1,8 +1,11 @@
 """Sandbox containment tests: student code must never escape or hang the
-grader. These run on both Windows (Job Object) and POSIX (rlimits) in CI."""
+grader. These run on both Windows (Job Object) and POSIX (rlimits) in CI.
+
+input() is mocked (returns sequential numeric strings then "") so top-level
+input() calls don't crash the module — submissions run to completion and
+functional probes can reach all functions."""
 
 import os
-import tempfile
 
 from copcat.sandbox import run_sandboxed
 
@@ -42,14 +45,21 @@ def test_construct_error_is_not_raises(tmp_path):
     assert r["probes"]["x"]["status"] == "construct_error"
 
 
-def test_input_bomb_contained_by_eoferror(tmp_path):
+def test_input_bomb_no_longer_crashes(tmp_path):
+    """input() returns mock values — the module imports cleanly and all
+    functions are defined, so probes work."""
     p = _write(tmp_path, "menu.py",
-               "while True:\n    c = input('> ')\n    print(c)\n")
-    r = run_sandboxed(p, [], timeout_s=5)
-    assert r["crash"] and "EOFError" in r["crash"]
+               "name = input('name: ')\n"
+               "def greet():\n    return 'hello ' + name\n")
+    r = run_sandboxed(p, [{"id": "g", "construct": "greet()",
+                           "expect": "ok"}], timeout_s=10)
+    assert r["crash"] is None
+    assert r["probes"]["g"]["status"] == "ok"
 
 
 def test_catchall_menu_loop_killed_by_timeout(tmp_path):
+    """A catch-all while-True loop that swallows exceptions runs forever —
+    the parent's hard timeout is the backstop."""
     p = _write(tmp_path, "menu2.py",
                "while True:\n"
                "    try:\n"
@@ -61,16 +71,21 @@ def test_catchall_menu_loop_killed_by_timeout(tmp_path):
     assert r["crash"] and "timeout" in r["crash"]
 
 
-def test_partial_namespace_salvage(tmp_path):
-    p = _write(tmp_path, "partial2.py",
-               "class Book:\n"
-               "    def __init__(self): self.ok = 1\n"
+def test_partial_namespace_full_salvage(tmp_path):
+    """With mock inputs, the module imports cleanly — no partial salvage
+    needed. All functions are available for probing."""
+    p = _write(tmp_path, "ordered.py",
+               "def factorial(n):\n"
+               "    if n <= 1: return 1\n"
+               "    return n * factorial(n-1)\n"
                "\n"
-               "x = input('name: ')\n")
-    r = run_sandboxed(p, [{"id": "c", "construct": "Book()", "call": "obj.ok",
-                           "expect": "truthy"}], timeout_s=10)
-    assert r["crash"] and "EOFError" in r["crash"]
-    assert r["probes"]["c"]["status"] == "ok"
+               "x = int(input('n: '))\n"
+               "print(factorial(x))\n")
+    r = run_sandboxed(p, [{"id": "f", "construct": "factorial(5)",
+                           "call": "factorial(5) == 120", "expect": "truthy"}],
+                      timeout_s=10)
+    assert r["crash"] is None
+    assert r["probes"]["f"]["status"] == "ok"
 
 
 def test_runaway_loop_contained(tmp_path):

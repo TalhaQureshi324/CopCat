@@ -595,7 +595,8 @@ def grade_submission(path, src, rubric):
                   "probes": {}}
     if dynamic_checks:
         run_result = run_sandboxed(path, probes, timeout_s, memory_mb,
-                                   aliases=sandbox_aliases)
+                                   aliases=sandbox_aliases,
+                                   mock_inputs=settings.get("mock_inputs"))
 
     # ---- evaluate every check -------------------------------------------
     failed = []          # (task_id, deduct, detail)

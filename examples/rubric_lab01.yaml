@@ -1,0 +1,310 @@
+# CopCat rubric - AI Lab 01: Python Essentials
+# 8 tasks covering variables, operators, conditionals, loops, functions,
+# strings, lists, exception handling, and randomisation.
+#
+# Lab 01 is procedural (no OOP), most submissions use input() heavily.
+# The sandbox blocks input() so runs_clean / stdout checks are unreliable
+# for interactive scripts. Static pattern checks + functional probes for
+# pure functions (T4) are the most reliable approach.
+#
+# No false penalties: every check verifies a construct the lab manual
+# explicitly requires. No implementation-detail checks.
+
+lab: ai_lab01
+title: "Python Essentials"
+total_marks: 10.0
+
+settings:
+  timeout_s: 5
+  memory_mb: 512
+
+tasks:
+  # =====================================================================
+  - id: T1
+    weight: 1.0
+    title: "Digital Time Converter"
+    checks:
+      - id: t1_div
+        type: regex_present
+        pattern: "//"
+        deduct: 0.3
+        fail: "Integer division (//) not used for hours calculation"
+
+      - id: t1_mod
+        type: regex_present
+        pattern: "%"
+        deduct: 0.3
+        fail: "Modulus (%) not used for minutes/seconds calculation"
+
+      - id: t1_fstring
+        type: regex_present
+        pattern: "f[\"']"
+        deduct: 0.2
+        fail: "f-string not used for output formatting"
+
+      - id: t1_input
+        type: regex_present
+        pattern: "input"
+        deduct: 0.2
+        fail: "No user input taken"
+
+  # =====================================================================
+  - id: T2
+    weight: 1.5
+    title: "Shopping Bill Calculator"
+    checks:
+      - id: t2_inputs
+        type: regex_present
+        pattern: "input"
+        deduct: 0.3
+        fail: "No user input for item prices or discount"
+
+      - id: t2_tryexcept
+        type: regex_present
+        pattern: "try|except"
+        deduct: 0.4
+        fail: "Exception handling not used for invalid numeric input"
+
+      - id: t2_subtotal
+        type: regex_present
+        pattern: "\\+"
+        deduct: 0.3
+        fail: "No addition for subtotal calculation"
+
+      - id: t2_discount
+        type: regex_present
+        pattern: "(?i)discount"
+        deduct: 0.3
+        fail: "No discount calculation found"
+
+      - id: t2_saved
+        type: regex_present
+        pattern: "(?i)saved|save"
+        deduct: 0.2
+        fail: "Amount saved not calculated or displayed"
+
+  # =====================================================================
+  - id: T3
+    weight: 1.5
+    title: "Water Intake Tracker"
+    checks:
+      - id: t3_loop
+        type: regex_present
+        pattern: "for\\s+|while\\s+"
+        deduct: 0.3
+        fail: "No loop used for tracking multiple glasses"
+
+      - id: t3_input
+        type: regex_present
+        pattern: "input"
+        deduct: 0.3
+        fail: "No user input for water consumption"
+
+      - id: t3_avg
+        type: regex_present
+        pattern: "/|average|avg"
+        deduct: 0.3
+        fail: "Average per glass not calculated"
+
+      - id: t3_target
+        type: regex_present
+        pattern: "(?i)(1000|target|daily|reach)"
+        deduct: 0.3
+        fail: "Daily target of 1000 ml not checked"
+
+      - id: t3_threshold
+        type: regex_present
+        pattern: ">=|250"
+        deduct: 0.3
+        fail: "Glasses with 250 ml or more not counted"
+
+  # =====================================================================
+  - id: T4
+    weight: 2.0
+    title: "Python Function Toolkit"
+    checks:
+      - id: t4_factorial
+        type: functional
+        construct: ""
+        call: "factorial(5)"
+        expect: truthy
+        deduct: 0.4
+        fail: "factorial(5) does not return 120"
+
+      - id: t4_palindrome
+        type: functional
+        construct: ""
+        call: "is_palindrome('madam')"
+        expect: truthy
+        deduct: 0.4
+        fail: "is_palindrome('madam') does not return True"
+
+      - id: t4_fibonacci
+        type: functional
+        construct: ""
+        call: "fibonacci(6) == [0, 1, 1, 2, 3, 5]"
+        expect: truthy
+        deduct: 0.4
+        fail: "fibonacci(6) does not return [0, 1, 1, 2, 3, 5]"
+
+      - id: t4_largest
+        type: functional
+        construct: ""
+        call: "find_largest([5, 12, 99, 4]) == 99"
+        expect: truthy
+        deduct: 0.4
+        fail: "find_largest([5, 12, 99, 4]) does not return 99"
+
+      - id: t4_no_max_builtin
+        type: forbidden_pattern
+        pattern: "=\\s*max\\s*\\(|return\\s+max\\s*\\("
+        deduct: 0.2
+        fail: "find_largest() must not use the built-in max() function"
+        include_comments: false
+
+      - id: t4_recursive
+        type: regex_present
+        pattern: "factorial\\s*\\(.*\\)"
+        deduct: 0.2
+        fail: "Factorial does not appear to use recursion"
+        include_comments: false
+
+  # =====================================================================
+  - id: T5
+    weight: 1.0
+    title: "Student Attendance Tracker"
+    checks:
+      - id: t5_present
+        type: regex_present
+        pattern: "(?i)present|\\.count\\s*\\("
+        deduct: 0.2
+        fail: "Present student count not found"
+
+      - id: t5_absent
+        type: regex_present
+        pattern: "(?i)absent|\\.count\\s*\\("
+        deduct: 0.2
+        fail: "Absent student count not found"
+
+      - id: t5_pct
+        type: regex_present
+        pattern: "/\\s*len|percentage|/\\s*\\*\\s*100|\\*\\s*100"
+        deduct: 0.3
+        fail: "Attendance percentage not calculated"
+
+      - id: t5_positions
+        type: regex_present
+        pattern: "(?i)position|index|enumerate|range"
+        deduct: 0.3
+        fail: "Absent student positions not tracked"
+
+  # =====================================================================
+  - id: T6
+    weight: 1.0
+    title: "Number Guessing Game"
+    checks:
+      - id: t6_random
+        type: regex_present
+        pattern: "random\\.randint|random\\.randrange"
+        deduct: 0.4
+        fail: "random.randint() not used to generate the secret number"
+
+      - id: t6_loop
+        type: regex_present
+        pattern: "while\\s+|for\\s+"
+        deduct: 0.2
+        fail: "No loop for repeated guessing"
+
+      - id: t6_feedback
+        type: regex_present
+        pattern: "(?i)(too high|too low|too big|too small|high!|low!)"
+        deduct: 0.2
+        fail: "No Too High / Too Low feedback to the player"
+
+      - id: t6_attempts
+        type: regex_present
+        pattern: "(?i)attempt|count|guess(es)?"
+        deduct: 0.2
+        fail: "Attempt counter not tracked"
+
+  # =====================================================================
+  - id: T7
+    weight: 1.0
+    title: "List Transformation"
+    checks:
+      - id: t7_div2
+        type: regex_present
+        pattern: "%\\s*2|divisible.*2|% 2"
+        deduct: 0.2
+        fail: "Numbers divisible by 2 not filtered"
+
+      - id: t7_div3
+        type: regex_present
+        pattern: "%\\s*3|divisible.*3|% 3"
+        deduct: 0.2
+        fail: "Numbers divisible by 3 not filtered"
+
+      - id: t7_both
+        type: regex_present
+        pattern: "%\\s*6|and.*%.*3|%\\s*2.*and.*%\\s*3|%\\s*3.*%\\s*2|%\\s*2.*%\\s*3"
+        deduct: 0.3
+        fail: "Numbers divisible by both 2 and 3 not filtered"
+
+      - id: t7_sum
+        type: regex_present
+        pattern: "sum\\s*\\(|\\+=|total"
+        deduct: 0.2
+        fail: "Sum of list elements not calculated"
+
+      - id: t7_count
+        type: regex_present
+        pattern: "len\\s*\\(|count"
+        deduct: 0.1
+        fail: "Number of elements not counted"
+
+  # =====================================================================
+  - id: T8
+    weight: 1.0
+    title: "Dictionary Explorer"
+    checks:
+      - id: t8_keys
+        type: regex_present
+        pattern: "\\.keys\\s*\\(|\\.keys\\b"
+        deduct: 0.15
+        fail: "Dictionary keys not displayed"
+
+      - id: t8_values
+        type: regex_present
+        pattern: "\\.values\\s*\\(|\\.values\\b|for.*\\.items\\s*\\("
+        deduct: 0.15
+        fail: "Dictionary values not displayed"
+
+      - id: t8_items
+        type: regex_present
+        pattern: "\\.items\\s*\\("
+        deduct: 0.15
+        fail: "Dictionary key-value pairs not displayed"
+
+      - id: t8_email_check
+        type: regex_present
+        pattern: "(?i)email.*in\\s+student|email.*not.*in|in\\s+student"
+        deduct: 0.15
+        fail: "Email key existence not checked"
+
+      - id: t8_email_add
+        type: regex_present
+        pattern: "(?i)\\[\\s*['\"]email['\"]\\s*\\]\\s*=|\\[['\"]email['\"]\\]"
+        deduct: 0.15
+        fail: "Email key not added to dictionary"
+
+      - id: t8_cgpa_update
+        type: regex_present
+        pattern: "(?i)cgpa.*=|\\[\\s*['\"]cgpa['\"]\\s*\\]\\s*="
+        deduct: 0.15
+        fail: "CGPA not updated"
+
+      - id: t8_age_remove
+        type: regex_present
+        pattern: "(?i)del\\s+student|\\.pop\\s*\\(\\s*['\"]age|del.*age"
+        deduct: 0.15
+        fail: "Age key not removed from dictionary"
