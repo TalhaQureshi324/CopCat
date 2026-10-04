@@ -42,11 +42,12 @@ def compare_pair(a, b, cfg):
     shadow_direct = max(directions) if directions else 0.0
     scores["shadow"] = (shadow_direct, jaccard(a.fps["shadow"], b.fps["shadow"]))
 
-    # source channel: char-ratio with difflib defaults (fast + calibrated),
-    # max over comment-stripped stream and raw source
+    # source channel: char-ratio on the consensus-stripped code stream.
+    # We deliberately do NOT include the raw source ratio — the raw file
+    # contains the assignment's mandated skeleton which every student shares,
+    # inflating similarity for pairs who only copied template code.
     src_code = difflib.SequenceMatcher(None, a.code_text, b.code_text).ratio()
-    src_raw = difflib.SequenceMatcher(None, a.source, b.source).ratio()
-    scores["source"] = (max(src_code, src_raw), None)
+    scores["source"] = (src_code, None)
 
     # evasion-match rule: a mostly-commented file whose folded code shadow
     # lines up with another student's live code = MOSS-evasion signature.

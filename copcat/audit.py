@@ -82,6 +82,7 @@ def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all"):
                     if " ".join(ln.split()) not in consensus]
         if len(stripped) >= cfg.min_lines:
             s.effective_lines = stripped
+            s.code_text = "\n".join(stripped)
 
     pairs = compare_all(subs, cfg, workers=workers)
     pairs = apply_evasion_rule(pairs, subs, cfg)
