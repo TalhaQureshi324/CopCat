@@ -7,10 +7,15 @@ venv/
 dist/
 build/
 
-# CopCat generated reports
+# CopCat generated reports / results
 reports*/
+copcat_results/
 copcat_audit.csv
 copcat_audit.txt
+copcat_results/
+
+# pytest
+.pytest_cache/
 
 # Editors / OS
 .vscode/
