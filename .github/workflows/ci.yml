@@ -21,4 +21,13 @@ jobs:
       - name: Install
         run: pip install -e .[dev,web]
       - name: Test
-        run: pytest -q
+        run: python -m pytest tests/ -v --tb=long
+      - name: Show failure details
+        if: failure()
+        run: |
+          echo "::group::pip list"
+          pip list
+          echo "::endgroup::"
+          echo "::group::Python version"
+          python --version
+          echo "::endgroup::"
