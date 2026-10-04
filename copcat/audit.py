@@ -71,6 +71,18 @@ def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all"):
     # batch-common damper: strip fingerprints present in >=30% of the batch
     damped = apply_batch_damper(subs, cfg)
 
+    # consensus line subtraction: strip lines present in >=30% of the batch
+    # (starter code, mandated skeleton) from the source channel so the difflib
+    # ratio reflects pair-specific overlap, not shared template code.
+    # A minimum-content guard prevents near-empty files from inflating ratios.
+    from .channels import build_consensus_lines, subtract_consensus_lines
+    consensus = build_consensus_lines(subs, share=cfg.damp_share, min_docs=3)
+    for s in subs:
+        stripped = [ln for ln in s.effective_lines
+                    if " ".join(ln.split()) not in consensus]
+        if len(stripped) >= cfg.min_lines:
+            s.effective_lines = stripped
+
     pairs = compare_all(subs, cfg, workers=workers)
     pairs = apply_evasion_rule(pairs, subs, cfg)
 
