@@ -46,6 +46,8 @@ def _run_job_sync(job_id, mode, preserve):
     out_dir = os.path.join(jdir, "output")
     preserved = tuple(x.strip() for x in (preserve or "").split(",") if x.strip())
     cfg = AuditConfig(preserved=preserved)
+    if job.get("starter") and os.path.isfile(job["starter"]):
+        cfg.starters = (job["starter"],)
     started = time.time()
     summary = {}
     try:
@@ -82,7 +84,8 @@ def _run_job_sync(job_id, mode, preserve):
 # --------------------------------------------------------------------------
 @app.post("/api/jobs")
 async def create_job(submissions: UploadFile = File(...),
-                     rubric: UploadFile = File(None)):
+                     rubric: UploadFile = File(None),
+                     starter: UploadFile = File(None)):
     job_id = uuid.uuid4().hex[:12]
     jdir = _job_dir(job_id)
     sub_dir = os.path.join(jdir, "submissions")
@@ -95,9 +98,15 @@ async def create_job(submissions: UploadFile = File(...),
         rubric_path = os.path.join(jdir, "rubric.yaml")
         with open(rubric_path, "wb") as fh:
             fh.write(await rubric.read())
+    starter_path = None
+    if starter and starter.filename:
+        starter_path = os.path.join(jdir, "starter.py")
+        with open(starter_path, "wb") as fh:
+            fh.write(await starter.read())
     with JOBS_LOCK:
         JOBS[job_id] = {"status": "uploaded", "dir": jdir,
                         "submissions": target, "rubric": rubric_path,
+                        "starter": starter_path,
                         "mode": None, "error": None, "summary": None}
     return {"job_id": job_id}
 

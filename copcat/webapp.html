@@ -49,8 +49,12 @@ a { color:var(--accent); }
 <input type="file" id="file" hidden></div>
 <div id="uploadinfo" style="margin-top:8px;font-size:13px;color:#27ae60;font-weight:600"></div>
 <div class="row" style="margin-top:12px">
-<label>Rubric (optional, for grading): <input type="file" id="rubric" accept=".yaml,.yml"></label>
+<label>Rubric (optional): <input type="file" id="rubric" accept=".yaml,.yml"></label>
 <span id="rubricinfo" style="font-size:13px;color:#27ae60;font-weight:600"></span>
+</div>
+<div class="row" style="margin-top:8px">
+<label>Starter code (optional): <input type="file" id="starterfile" accept=".py"></label>
+<span id="starterinfo" style="font-size:13px;color:#27ae60;font-weight:600"></span>
 </div>
 </div>
 
@@ -99,6 +103,10 @@ $("rubric").onchange = () => {
   const r = $("rubric").files[0];
   $("rubricinfo").textContent = r ? "✓ " + r.name : "";
 };
+$("starterfile").onchange = () => {
+  const st = $("starterfile").files[0];
+  $("starterinfo").textContent = st ? "✓ " + st.name : "";
+};
 
 function showUploadInfo() {
   const f = $("file").files[0];
@@ -114,6 +122,8 @@ function run(mode) {
   up.append("submissions", f);
   const rub = $("rubric").files[0];
   if (rub) up.append("rubric", rub);
+  const stf = $("starterfile").files[0];
+  if (stf) up.append("starter", stf);
   $("status").textContent = "Uploading...";
   fetch("/api/jobs", { method: "POST", body: up })
     .then(r => r.json()).then(d => {
