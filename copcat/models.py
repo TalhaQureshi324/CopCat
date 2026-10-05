@@ -48,6 +48,13 @@ class Submission:
     notes: list = field(default_factory=list)
     fps: dict = field(default_factory=dict)             # channel -> fingerprint set
 
+    def __lt__(self, other):
+        """Safety net: sort by roll number if Submission objects are ever
+        accidentally compared (prevents TypeError from propagating)."""
+        if isinstance(other, Submission):
+            return self.roll < other.roll
+        return NotImplemented
+
 
 @dataclass
 class PairResult:
