@@ -57,7 +57,7 @@ def _run_job_sync(job_id, mode, preserve):
             summary["pairs"] = [
                 {"a": p.roll_a, "b": p.roll_b,
                  "blended": round(100 * p.blended, 1), "flag": p.flag}
-                for p in pairs if p.flag != "CLEAN"]
+                for p in pairs if p.blended >= 0.45]
         if mode in ("grade", "both"):
             if not job["rubric"]:
                 summary["gradebook"] = []
