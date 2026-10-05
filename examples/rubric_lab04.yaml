@@ -1,0 +1,138 @@
+# CopCat rubric - Lab 04: Graph Traversals (BFS, DFS) & 4-Puzzle Solver
+# Resilient authoring: checks behavioural compliance, not implementation quirks.
+# Aliases are honoured automatically by the engine for renamed functions.
+
+lab: ai_lab04
+title: "Graph Traversals & 4-Puzzle Solver"
+total_marks: 10.0
+
+settings:
+  timeout_s: 10
+  memory_mb: 512
+
+tasks:
+  # =====================================================================
+  - id: T1a
+    weight: 1.5
+    title: "Breadth-First Search (BFS)"
+    checks:
+      - id: bfs_fn_exists
+        type: regex_present
+        pattern: "def\\s+bfs\\b"
+        deduct: 0.3
+        fail: "bfs() function not defined"
+
+      - id: bfs_no_deque
+        type: forbidden_pattern
+        pattern: "from\\s+collections\\s+import.*deque|collections\\.deque"
+        deduct: 0.2
+        fail: "Use of collections.deque is forbidden (lab spec requires list-based queue)"
+
+      - id: bfs_queue
+        type: regex_present
+        pattern: "queue|\\.pop\\(\\s*0\\s*\\)|pop\\(0\\)"
+        deduct: 0.3
+        fail: "BFS must use a FIFO queue (list.pop(0) or similar)"
+
+      - id: bfs_visited
+        type: regex_present
+        pattern: "visited|seen"
+        deduct: 0.2
+        fail: "BFS must track visited nodes"
+
+      - id: bfs_result
+        type: functional
+        construct: ""
+        set_expr: |
+          edge = [
+              ["B", "C"],
+              ["A", "D", "E"],
+              ["A", "F"],
+              ["B"],
+              ["B"],
+              ["C"],
+          ]
+        call: "bfs(edge, 'A')"
+        expect: ok
+        deduct: 0.5
+        fail: "bfs() does not execute without error on the sample graph"
+
+  # =====================================================================
+  - id: T1b
+    weight: 1.5
+    title: "Depth-First Search (DFS)"
+    checks:
+      - id: dfs_fn_exists
+        type: regex_present
+        pattern: "def\\s+dfs\\b"
+        deduct: 0.3
+        fail: "dfs() function not defined"
+
+      - id: dfs_stack_or_recurse
+        type: regex_present
+        pattern: "stack|\\.pop\\(\\s*\\)|recursion|dfs\\s*\\(.*\\)"
+        deduct: 0.2
+        fail: "DFS must use a stack or recursion"
+
+      - id: dfs_result
+        type: functional
+        construct: ""
+        set_expr: |
+          edge = [
+              ["B", "C"],
+              ["A", "D", "E"],
+              ["A", "F"],
+              ["B"],
+              ["B"],
+              ["C"],
+          ]
+        call: "dfs(edge, 'A')"
+        expect: ok
+        deduct: 0.5
+        fail: "dfs() does not execute without error on the sample graph"
+
+  # =====================================================================
+  - id: T2
+    weight: 4.0
+    title: "4-Puzzle (2x2 Sliding Puzzle) — Solvability & Search"
+    checks:
+      - id: puzzle_solvability_fn
+        type: regex_present
+        pattern: "(?i)solv|inversion"
+        deduct: 0.5
+        fail: "Solvability check function not found"
+
+      - id: puzzle_bfs_fn
+        type: regex_present
+        pattern: "(?i)def.*bfs|breadth"
+        deduct: 0.5
+        fail: "BFS shortest-path solver for 4-puzzle not found"
+
+      - id: puzzle_dfs_fn
+        type: regex_present
+        pattern: "(?i)def.*dfs|depth"
+        deduct: 0.5
+        fail: "DFS solver for 4-puzzle not found"
+
+      - id: puzzle_move_gen
+        type: regex_present
+        pattern: "(?i)(up|down|left|right|move|swap|neighbou?r|successor)"
+        deduct: 0.5
+        fail: "Move generation (Up/Down/Left/Right) not found"
+
+      - id: puzzle_goal_check
+        type: regex_present
+        pattern: "(?i)goal|\\(1\\s*,\\s*2\\s*,\\s*3\\s*,\\s*0\\)"
+        deduct: 0.5
+        fail: "Goal state (1, 2, 3, 0) not defined"
+
+      - id: puzzle_print_states
+        type: regex_present
+        pattern: "(?i)print|display|show"
+        deduct: 0.5
+        fail: "Solution sequence must be printed/displayed"
+
+      - id: puzzle_run
+        type: runs_clean
+        deduct: 1.0
+        fail: "4-puzzle solver crashed during execution"

@@ -1,9 +1,6 @@
-"""Lab 01 starter code — data values prescribed by the lab manual.
-
-These are the ONLY data structures given to students. Everything else
-(variables, logic, functions, loops) is student-implemented. Fingerprints
-from this file are subtracted from all submissions before comparison.
-"""
+"""Lab 01 starter — data values prescribed by the lab manual.
+Everything else (logic, functions, loops) is student-implemented.
+CopCat subtracts fingerprints from this file before scoring."""
 
 # Task 5: Student Attendance Tracker
 attendance = ["P", "A", "P", "P", "A", "P", "A", "P"]
