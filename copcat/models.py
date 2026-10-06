@@ -12,7 +12,7 @@ class AuditConfig:
     damp_share_ast: float = 0.50  # stricter bar for the AST channel: canonical
     # equivalence makes every same-structure hierarchy "shared" across a batch,
     # so the default bar would erase rename-invariance evidence
-    suspicious: float = 0.60     # flag threshold
+    suspicious: float = 0.45     # flag threshold
     high: float = 0.80           # high-probability threshold
     confirm_min: float = 0.45    # prefilter bar for expensive confirmations
     evasion_shadow_min: float = 0.12  # shadow-vs-live containment for evasion match

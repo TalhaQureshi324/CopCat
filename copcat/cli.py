@@ -23,7 +23,7 @@ def build_parser():
     a.add_argument("--k", type=int, default=16, help="k-gram size in tokens (default 16)")
     a.add_argument("--window", type=int, default=8, help="winnowing window (default 8)")
     a.add_argument("--comment-ngram", type=int, default=5, dest="comment_ngram")
-    a.add_argument("--sus", type=float, default=0.60, help="suspicious threshold")
+    a.add_argument("--sus", type=float, default=0.45, help="suspicious threshold")
     a.add_argument("--high", type=float, default=0.80, help="high-probability threshold")
     a.add_argument("--min-lines", type=int, default=15, dest="min_lines")
     a.add_argument("--workers", type=int, default=0,
