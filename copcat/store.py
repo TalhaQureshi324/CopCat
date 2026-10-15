@@ -179,7 +179,7 @@ class BlobStore:
     def _list(self, prefix, limit=1000):
         blobs, cursor = [], None
         while True:
-            qs = {"mode": "listing", "prefix": prefix, "limit": str(limit)}
+            qs = {"mode": "expanded", "prefix": prefix, "limit": str(limit)}
             if cursor:
                 qs["cursor"] = cursor
             body = self._req("GET", self.BASE + "?" +
