@@ -21,7 +21,7 @@ import time
 import uuid
 
 from .models import AuditConfig
-from .store import get_store
+from .store import BlobStore, DiskStore, get_store
 
 try:
     from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -44,6 +44,25 @@ def _auth(request: Request):
         return JSONResponse({"error": "unauthorized: access key required"},
                             status_code=401)
     return None
+
+
+def _store_or_error():
+    """Store backend, or a 503 explaining the one misconfiguration that
+    breaks hosted deployments: no Blob store connected."""
+    if not os.environ.get("BLOB_READ_WRITE_TOKEN") and \
+            os.environ.get("VERCEL"):
+        return None, JSONResponse(
+            {"error": "Server storage is not configured. Connect a Vercel "
+                      "Blob store to this project (Project -> Storage -> "
+                      "Connect), then redeploy so the "
+                      "BLOB_READ_WRITE_TOKEN env var is applied."},
+            status_code=503)
+    try:
+        return get_store(), None
+    except Exception as exc:
+        return None, JSONResponse(
+            {"error": "storage init failed: {}".format(exc)},
+            status_code=503)
 
 
 def _meta_view(meta):
@@ -119,7 +138,9 @@ async def create_job(request: Request,
     denied = _auth(request)
     if denied:
         return denied
-    store = get_store()
+    store, err = _store_or_error()
+    if err:
+        return err
     job_id = uuid.uuid4().hex[:12]
     uploads = {"submissions": store.save_upload(
         job_id, "submissions", submissions.filename or "submissions.zip",
@@ -146,7 +167,9 @@ async def run_job(job_id: str, request: Request,
     denied = _auth(request)
     if denied:
         return denied
-    store = get_store()
+    store, err = _store_or_error()
+    if err:
+        return err
     meta = store.get_meta(job_id)
     if not meta:
         return JSONResponse({"error": "unknown job"}, status_code=404)
@@ -170,7 +193,10 @@ async def list_jobs(request: Request):
     denied = _auth(request)
     if denied:
         return denied
-    rows = [_meta_view(m) for m in get_store().list_jobs()]
+    store, err = _store_or_error()
+    if err:
+        return err
+    rows = [_meta_view(m) for m in store.list_jobs()]
     rows.sort(key=lambda m: m.get("created") or "", reverse=True)
     return {"jobs": rows}
 
@@ -180,7 +206,10 @@ async def job_status(job_id: str, request: Request):
     denied = _auth(request)
     if denied:
         return denied
-    meta = get_store().get_meta(job_id)
+    store, err = _store_or_error()
+    if err:
+        return err
+    meta = store.get_meta(job_id)
     if not meta:
         return JSONResponse({"error": "unknown job"}, status_code=404)
     return _meta_view(meta)
@@ -191,7 +220,9 @@ async def delete_job(job_id: str, request: Request):
     denied = _auth(request)
     if denied:
         return denied
-    store = get_store()
+    store, err = _store_or_error()
+    if err:
+        return err
     if not store.get_meta(job_id):
         return JSONResponse({"error": "unknown job"}, status_code=404)
     store.delete_job(job_id)
@@ -203,7 +234,10 @@ async def gradebook(job_id: str, request: Request):
     denied = _auth(request)
     if denied:
         return denied
-    data = get_store().open_result(job_id, "grade_report.csv")
+    store, err = _store_or_error()
+    if err:
+        return err
+    data = store.open_result(job_id, "grade_report.csv")
     if data is None:
         return JSONResponse({"error": "no gradebook"}, status_code=404)
     return Response(content=data, media_type="text/csv",
@@ -219,7 +253,10 @@ async def job_report_file(job_id: str, name: str, request: Request):
         return denied
     if "/" in name or "\\" in name or ".." in name or name.startswith("."):
         return JSONResponse({"error": "not found"}, status_code=404)
-    data = get_store().open_result(job_id, name)
+    store, err = _store_or_error()
+    if err:
+        return err
+    data = store.open_result(job_id, name)
     if data is None:
         return JSONResponse({"error": "not found"}, status_code=404)
     media = "text/html" if name.endswith(".html") else "text/plain"
@@ -233,8 +270,11 @@ async def dossier(job_id: str, roll_a: str, roll_b: str, request: Request):
     denied = _auth(request)
     if denied:
         return denied
+    store, err = _store_or_error()
+    if err:
+        return err
     name = "dossiers/dossier_{}__vs__{}.html".format(roll_a, roll_b)
-    data = get_store().open_result(job_id, name)
+    data = store.open_result(job_id, name)
     if data is None:
         return JSONResponse({"error": "not found"}, status_code=404)
     return Response(content=data, media_type="text/html")

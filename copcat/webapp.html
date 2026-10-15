@@ -226,7 +226,14 @@ async function deleteJob(id, ev) {
 
 async function refreshHistory() {
   const r = await api("/api/jobs");
-  if (!r.ok) return;
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    $("history").classList.remove("hidden");
+    $("joblist").innerHTML = '<div class="err">' +
+      (e.error || ("job history unavailable (HTTP " + r.status + ")")) +
+      "</div>";
+    return;
+  }
   const d = await r.json();
   const jobs = d.jobs || [];
   $("history").classList.toggle("hidden", jobs.length === 0);

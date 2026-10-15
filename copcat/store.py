@@ -51,7 +51,8 @@ class DiskStore:
     def __init__(self, root=None):
         self.root = root or os.environ.get("COPCAT_RESULTS_DIR") or \
             os.path.join(os.getcwd(), "copcat_results")
-        os.makedirs(os.path.join(self.root, _META_DIR), exist_ok=True)
+        # directories are created lazily by write operations, so read-only
+        # filesystems can still serve reads (empty history)
 
     # -- uploads ----------------------------------------------------------
     def save_upload(self, job_id, kind, name, data):
@@ -75,6 +76,7 @@ class DiskStore:
         return os.path.join(self.root, _META_DIR, job_id + ".json")
 
     def save_meta(self, meta):
+        os.makedirs(os.path.join(self.root, _META_DIR), exist_ok=True)
         with open(self._meta_path(meta["job_id"]), "w", encoding="utf-8") as fh:
             json.dump(meta, fh)
 
@@ -88,7 +90,11 @@ class DiskStore:
     def list_jobs(self):
         meta_dir = os.path.join(self.root, _META_DIR)
         out = []
-        for name in os.listdir(meta_dir):
+        try:
+            names = os.listdir(meta_dir)
+        except OSError:
+            return out
+        for name in names:
             if not name.endswith(".json"):
                 continue
             try:
