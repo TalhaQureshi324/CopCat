@@ -167,11 +167,23 @@ class BlobStore:
                         for part in pathname.split("/"))
 
     def _put(self, pathname, data, content_type):
-        body = self._req("PUT", self.BASE + "/" + self._q(pathname),
-                         data=data, headers={
-                             "x-add-random-suffix": "0",
-                             "x-content-type": content_type})
-        return json.loads(body)["url"]
+        url = self.BASE + "/" + self._q(pathname)
+        # stores are created as public or private; declare the matching
+        # access and self-heal by retrying the other mode on a 400 mismatch
+        last_exc = None
+        for access in ("private", "public"):
+            try:
+                body = self._req("PUT", url, data=data, headers={
+                    "x-add-random-suffix": "0",
+                    "x-allow-overwrite": "1",
+                    "x-vercel-blob-access": access,
+                    "x-content-type": content_type})
+                return json.loads(body)["url"]
+            except RuntimeError as exc:
+                last_exc = exc
+                if "access" not in str(exc):
+                    raise
+        raise last_exc
 
     def _get(self, url):
         return self._req("GET", url)
