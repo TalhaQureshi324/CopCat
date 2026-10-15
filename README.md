@@ -58,6 +58,55 @@ pairs sit at ~1–8%); ≥25% escalates to HIGH.
 
 Full install/run guide and cheatsheet: [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
 
+## Web dashboard
+
+```bash
+pip install "copcat[web]"
+copcat web                # http://localhost:8000
+```
+
+Drag-and-drop a submissions ZIP (+ optional rubric/starter), run the audit
+and/or grading, browse flagged pairs with evidence dossiers, export the
+gradebook CSV. Job history persists across page refreshes and server
+restarts (registry of JSON files, not RAM).
+
+Optional environment variables:
+
+| Variable | Effect |
+|---|---|
+| `COPCAT_RESULTS_DIR` | where jobs/artifacts live (default `./copcat_results`) |
+| `COPCAT_ACCESS_TOKEN` | if set, the API requires this key (`x-copcat-key` header; the dashboard prompts for it) |
+| `BLOB_READ_WRITE_TOKEN` | switches storage from local disk to Vercel Blob (set automatically by Vercel — this is what makes the hosted deployment work) |
+
+## Deploy to Vercel (free)
+
+CopCat runs on Vercel's free Hobby plan. Jobs execute **synchronously**
+inside the request (serverless kills background threads), and uploads +
+results persist in **Vercel Blob** — so history survives refreshes and
+redeploys. One request handles the whole run.
+
+1. Push this repo to GitHub (already done) and open
+   [vercel.com/new](https://vercel.com/new) → import the repo. Vercel
+   auto-detects `api/index.py` + `vercel.json`; no build settings needed.
+2. In the project: **Storage → Create Database → Blob** (free tier) →
+   connect it to the project. This sets `BLOB_READ_WRITE_TOKEN` for you.
+3. Optional: add env var `COPCAT_ACCESS_TOKEN` (any secret string) so only
+   people with the key can use your deployment — recommended, the URL is
+   public otherwise.
+4. Deploy. Dashboard refresh shows **Job history** — every past upload and
+   its results stay re-openable.
+
+Free-tier limits to know:
+
+- request body ≤ **4.5 MB** → keep the submissions ZIP small (plain `.py`
+  files zip tiny); upload loose-file batches in one zip
+- one run must finish within **5 minutes** (Fluid compute `maxDuration`
+  300 s) → for classes of ~50+, run **Audit** and **Grading** as two
+  separate runs instead of "Run both"
+- Hobby plan terms are **non-commercial** — fine for coursework; a paid
+  plan is required when this becomes a product
+
+
 ## Layout
 
 ```

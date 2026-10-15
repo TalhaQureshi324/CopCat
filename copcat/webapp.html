@@ -21,6 +21,7 @@ h2 { font-size:15px; margin:0 0 12px; color:#2c3e50; text-transform:uppercase; l
 button { background:var(--accent); border:none; color:#fff; padding:9px 18px; border-radius:5px; font-size:14px; cursor:pointer; }
 button:disabled { background:#b2bec3; cursor:wait; }
 button.secondary { background:#636e72; }
+button.danger { background:var(--bad); padding:4px 10px; font-size:12px; }
 select, input[type=text] { padding:8px; border:1px solid var(--line); border-radius:5px; font-size:14px; }
 #status { margin-top:10px; font-size:14px; }
 .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:6px; }
@@ -36,11 +37,19 @@ tr:hover td { background:#f7f9ff; }
 a { color:var(--accent); }
 .cluster { display:inline-block; background:#ecf0f1; border:1px solid var(--line); border-radius:14px; padding:4px 12px; margin:3px; font-size:13px; }
 .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }
+.jrow { display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--line); padding:7px 2px; font-size:13px; }
+.jrow:last-child { border-bottom:none; }
+.jrow .id { font-family:Consolas,monospace; color:#636e72; }
+.jrow .meta { color:#636e72; }
+.pill { padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; color:#fff; }
+.pill-done { background:var(--good); } .pill-running { background:var(--accent); }
+.pill-error { background:var(--bad); } .pill-uploaded { background:#636e72; }
+.jrow .open { margin-left:auto; }
 </style>
 </head>
 <body>
 <header><h1>CopCat</h1>
-<div class="sub">deterministic lab plagiarism audit &amp; rubric grading &mdash; no AI tokens, everything runs locally</div></header>
+<div class="sub">deterministic lab plagiarism audit &amp; rubric grading &mdash; no AI tokens</div></header>
 <main>
 
 <div class="card">
@@ -56,15 +65,16 @@ a { color:var(--accent); }
 <label>Starter code (optional): <input type="file" id="starterfile" accept=".py"></label>
 <span id="starterinfo" style="font-size:13px;color:#27ae60;font-weight:600"></span>
 </div>
+<p class="note">When hosted on Vercel, uploads are limited to ~4 MB per file (platform request limit).</p>
 </div>
 
 <div class="card">
 <h2>2. Run</h2>
 <div class="row">
 <label>Preserved names <input type="text" id="preserve" placeholder="Book,Library,calculate_pay,..."></label>
-<button class="secondary" onclick="run('audit')">Run audit</button>
-<button class="secondary" onclick="run('grade')">Run grading</button>
-<button onclick="run('both')">Run both</button>
+<button class="secondary" id="b-audit" onclick="run('audit')">Run audit</button>
+<button class="secondary" id="b-grade" onclick="run('grade')">Run grading</button>
+<button id="b-both" onclick="run('both')">Run both</button>
 </div>
 <div id="status"></div>
 <div class="bar"><div id="bar"></div></div>
@@ -88,9 +98,15 @@ a { color:var(--accent); }
 <div id="gradebook"></div>
 </div>
 
+<div class="card hidden" id="history">
+<h2>Job history</h2>
+<p class="note">Previous uploads and results are kept &mdash; open any job to see its results again (they survive page refreshes).</p>
+<div id="joblist"></div>
+</div>
+
 </main>
 <script>
-let jobId = null, pollTimer = null;
+let jobId = null, runTimer = null, retried401 = false;
 const $ = id => document.getElementById(id);
 const drop = $("drop");
 drop.onclick = () => $("file").click();
@@ -115,7 +131,24 @@ function showUploadInfo() {
     : "";
 }
 
-function run(mode) {
+/* fetch wrapper: attaches the access key (if set) and asks for it on 401 */
+async function api(url, opts = {}, retry = true) {
+  opts.headers = Object.assign({}, opts.headers,
+    KEY ? { "x-copcat-key": KEY } : {});
+  const r = await fetch(url, opts);
+  if (r.status === 401 && retry) {
+    const k = prompt("This CopCat instance requires an access key:");
+    if (k !== null) { KEY = k; localStorage.setItem("copcat_key", KEY); return api(url, opts, false); }
+  }
+  return r;
+}
+let KEY = localStorage.getItem("copcat_key") || "";
+
+function setBusy(b) {
+  ["b-audit", "b-grade", "b-both"].forEach(id => $(id).disabled = b);
+}
+
+async function run(mode) {
   const f = $("file").files[0];
   if (!f) { alert("Choose a submissions file first"); return; }
   const up = new FormData();
@@ -124,30 +157,97 @@ function run(mode) {
   if (rub) up.append("rubric", rub);
   const stf = $("starterfile").files[0];
   if (stf) up.append("starter", stf);
+  $("err").textContent = "";
   $("status").textContent = "Uploading...";
-  fetch("/api/jobs", { method: "POST", body: up })
-    .then(r => r.json()).then(d => {
-      jobId = d.job_id;
-      const run = new FormData();
-      run.append("mode", mode);
-      run.append("preserve", $("preserve").value);
-      return fetch(`/api/jobs/${jobId}/run`, { method: "POST", body: run });
-    }).then(() => poll());
+  $("bar").style.width = "8%";
+  setBusy(true);
+  try {
+    const r1 = await api("/api/jobs", { method: "POST", body: up });
+    const d1 = await r1.json();
+    if (!r1.ok || d1.error) throw new Error(d1.error || "upload failed");
+    jobId = d1.job_id;
+    location.hash = "j=" + jobId;
+    const runF = new FormData();
+    runF.append("mode", mode);
+    runF.append("preserve", $("preserve").value);
+    const t0 = Date.now();
+    clearInterval(runTimer);
+    runTimer = setInterval(() => {
+      $("status").textContent = "running for " + Math.round((Date.now() - t0) / 1000) +
+        "s — a full batch can take a few minutes, keep this tab open";
+      $("bar").style.width = Math.min(92, 10 + (Date.now() - t0) / 4000) + "%";
+    }, 500);
+    const r2 = await api(`/api/jobs/${jobId}/run`, { method: "POST", body: runF });
+    const d2 = await r2.json();
+    clearInterval(runTimer);
+    if (d2.status === "error") {
+      $("bar").style.width = "0%";
+      $("status").textContent = "failed";
+      $("err").textContent = d2.error || "unknown error";
+    } else {
+      render(d2);
+    }
+    refreshHistory();
+  } catch (e) {
+    clearInterval(runTimer);
+    $("bar").style.width = "0%";
+    $("status").textContent = "failed";
+    $("err").textContent = String(e.message || e);
+  } finally {
+    setBusy(false);
+  }
 }
 
-function poll() {
-  clearInterval(pollTimer);
-  const dots = [".", "..", "..."]; let i = 0;
-  $("bar").style.width = "15%";
-  pollTimer = setInterval(() => {
-    fetch(`/api/jobs/${jobId}`).then(r => r.json()).then(d => {
-      $("status").textContent = "status: " + d.status + dots[i++ % 3];
-      $("bar").style.width = Math.min(90, 15 + i * 4) + "%";
-      if (d.status === "done") { clearInterval(pollTimer); render(d); }
-      if (d.status === "error") { clearInterval(pollTimer);
-        $("status").textContent = "failed"; $("err").textContent = d.error; }
-    });
-  }, 1200);
+async function openJob(id) {
+  const r = await api(`/api/jobs/${id}`);
+  if (r.status === 404) { alert("Job no longer exists"); refreshHistory(); return; }
+  const d = await r.json();
+  jobId = id;
+  location.hash = "j=" + id;
+  $("err").textContent = d.error || "";
+  if (d.status === "done") { render(d); }
+  else {
+    $("results").classList.add("hidden");
+    $("bar").style.width = "0%";
+    $("status").textContent = `job ${id}: ${d.status}` +
+      (d.mode ? ` (mode: ${d.mode})` : "") +
+      (d.status === "error" ? " — re-run to retry" : "");
+  }
+}
+
+async function deleteJob(id, ev) {
+  ev.stopPropagation();
+  if (!confirm("Delete job " + id + " and all its uploads/results?")) return;
+  await api(`/api/jobs/${id}`, { method: "DELETE" });
+  if (jobId === id) { jobId = null; location.hash = "";
+    $("results").classList.add("hidden"); $("status").textContent = ""; }
+  refreshHistory();
+}
+
+async function refreshHistory() {
+  const r = await api("/api/jobs");
+  if (!r.ok) return;
+  const d = await r.json();
+  const jobs = d.jobs || [];
+  $("history").classList.toggle("hidden", jobs.length === 0);
+  const box = $("joblist"); box.innerHTML = "";
+  for (const j of jobs) {
+    const row = document.createElement("div");
+    row.className = "jrow";
+    row.style.cursor = "pointer";
+    row.onclick = () => openJob(j.job_id);
+    const what = (j.summary && j.summary.gradebook !== undefined && (j.summary.gradebook || []).length)
+      ? `${j.summary.gradebook.length} graded` : "";
+    const npairs = j.summary && j.summary.pairs ? j.summary.pairs.length : 0;
+    row.innerHTML =
+      `<span class="id">${j.job_id}</span>` +
+      `<span class="pill pill-${j.status}">${j.status}</span>` +
+      `<span class="meta">${j.created || ""}</span>` +
+      `<span class="meta">${j.mode || ""}${j.mode ? " · " : ""}` +
+      `${npairs ? npairs + " flagged pairs" : ""}${npairs && what ? " · " : ""}${what}</span>` +
+      `<span class="open"><button class="danger" onclick="deleteJob('${j.job_id}', event)">delete</button></span>`;
+    box.appendChild(row);
+  }
 }
 
 function render(d) {
@@ -160,6 +260,9 @@ function render(d) {
   $("linkaudit").href = `/api/jobs/${jobId}/report/copcat_audit.txt`;
   const S = d.summary || {};
   const flagged = S.pairs || [];
+  $("linkindex").style.display = flagged.length ? "" : "none";
+  $("linkaudit").style.display = flagged.length ? "" : "none";
+  $("dlcsv").style.display = (S.gradebook || []).length ? "" : "none";
   const tbody = $("pairs").tBodies[0]; tbody.innerHTML = "";
   for (const p of flagged) {
     const tr = document.createElement("tr");
@@ -190,10 +293,6 @@ function render(d) {
 }
 
 function sortTable(col) {
-  const table = document.activeElement.closest("main") ? $("pairs") : $("pairs");
-  [...document.querySelectorAll("#pairs, #gradebook")].forEach(t => {
-    if (!t || !t.tBodies.length || t.id !== "pairs" && col >= 3) return;
-  });
   const tb = $("pairs").tBodies[0];
   [...tb.rows].sort((r1, r2) => {
     const a = r1.cells[col].textContent, b = r2.cells[col].textContent;
@@ -201,6 +300,15 @@ function sortTable(col) {
     return (!isNaN(na) && !isNaN(nb)) ? nb - na : a.localeCompare(b);
   }).forEach(r => tb.appendChild(r));
 }
+
+window.addEventListener("hashchange", () => {
+  const id = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
+  if (id && id !== jobId) openJob(id);
+});
+
+refreshHistory();
+const initial = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
+if (initial) openJob(initial);
 </script>
 </body>
 </html>

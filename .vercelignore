@@ -1,0 +1,11 @@
+# keep the serverless bundle lean: only the package + api + requirements ship
+tests
+docs
+examples
+reports_lab02
+reports_lab03
+copcat_results
+.pytest_cache
+.github
+*.md
+LICENSE
