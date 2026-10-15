@@ -106,8 +106,14 @@ def _send_access_code(to, code, note):
     }).encode("utf-8")
     req = urllib.request.Request(
         "https://api.resend.com/emails", data=body, method="POST",
-        headers={"authorization": "Bearer " + os.environ["RESEND_API_KEY"],
-                 "content-type": "application/json"})
+        headers={
+            "authorization": "Bearer " + os.environ["RESEND_API_KEY"],
+            "content-type": "application/json",
+            "accept": "application/json",
+            # a real User-Agent is required: api.resend.com sits behind
+            # Cloudflare, which 403-blocks the default python-urllib
+            # signature with "error code: 1010"
+            "user-agent": "CopCat/0.2 (+https://github.com/TalhaQureshi324/CopCat)"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             resp.read()
@@ -117,8 +123,7 @@ def _send_access_code(to, code, note):
             detail = exc.read().decode("utf-8", "replace")[:300]
         except Exception:
             pass
-        # surface Resend's own explanation (e.g. "you can only send
-        # testing emails to your own email address") in the dashboard
+        # surface the actual explanation in the dashboard
         raise RuntimeError("Resend returned {}: {}".format(
             exc.code, detail or exc.reason)) from exc
 
@@ -163,15 +168,17 @@ async def auth_request(request: Request, note: str = Form("")):
         return {"sent": True, "retry_after": int(
             pending["created"] + 60 - now)}
     code = "{:06d}".format(secrets.randbelow(1000000))
-    store.put_json("challenge", {
-        "code_hash": _code_hash(code), "created": now,
-        "expires": now + AUTH_CODE_TTL_S, "attempts": 0})
     try:
         _send_access_code(os.environ["COPCAT_NOTIFY_EMAIL"], code, note)
     except Exception as exc:
         return JSONResponse(
             {"error": "could not send the access email: {}".format(exc)},
             status_code=503)
+    # challenge is stored only after a successful send, so a failed email
+    # never poisons the 60-second anti-flood window
+    store.put_json("challenge", {
+        "code_hash": _code_hash(code), "created": now,
+        "expires": now + AUTH_CODE_TTL_S, "attempts": 0})
     return {"sent": True}
 
 
