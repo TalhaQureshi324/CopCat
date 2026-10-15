@@ -86,3 +86,31 @@ def fold_comments(comment_pairs):
                 for m in _STRING_RE.finditer(s):
                     shadow_strings.append(m.group(1) or m.group(2) or "")
     return shadow, [s for s in shadow_strings if s.strip()], code_like, total
+
+
+def shadow_code_lines(source):
+    """The plain-text code lines a commented-out file contributes to its
+    shadow stream (comment markers stripped) — lets dossiers show WHICH
+    hidden lines align with the counterpart's live code.
+
+    Mirrors fold_comments() exactly: code-parsed blocks contribute all
+    their lines; loosely-folded lines must match CODE_LIKE_RE.
+    """
+    from .lexing import lex
+    _, comments, _, _, _ = lex(source)
+    lines = []
+    for block in _group_blocks(comments):
+        text = "\n".join(_strip_hash(t) for t in block if t.strip())
+        if not text.strip():
+            continue
+        try:
+            ast.parse(text)
+            lines.extend(ln.strip() for ln in text.splitlines() if ln.strip())
+            continue
+        except (SyntaxError, ValueError):
+            pass
+        for raw in block:
+            s = _strip_hash(raw)
+            if s and CODE_LIKE_RE.match(s):
+                lines.append(s)
+    return lines

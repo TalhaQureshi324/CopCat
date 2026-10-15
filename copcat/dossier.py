@@ -13,6 +13,7 @@ import os
 import shutil
 import time
 
+from .shadow import shadow_code_lines
 from .webreport import (_CSS, _diff_rows, _esc, _flag_span,
                         _rename_evidence)
 
@@ -32,7 +33,22 @@ _PRINT_CSS = """
 """
 
 
-def _executive_summary(pair, sub_a, sub_b, cfg, renames, shared_lits):
+def _evasion_sides(sub_a, sub_b, cfg):
+    """For an evasion pair, return (hidden, live): the mostly-commented
+    submission and its live-code counterpart. None if this is not one."""
+    if sub_a.notes and len(sub_a.shadow_tokens) > len(sub_b.shadow_tokens):
+        hidden, live = sub_a, sub_b
+    elif sub_b.notes and len(sub_b.shadow_tokens) > len(sub_a.shadow_tokens):
+        hidden, live = sub_b, sub_a
+    else:
+        return None
+    if len(hidden.shadow_tokens) < cfg.evasion_min_shadow:
+        return None
+    return hidden, live
+
+
+def _executive_summary(pair, sub_a, sub_b, cfg, renames, shared_lits,
+                       evasion_sides=None):
     """Plain-English summary composed strictly from measured evidence."""
     s = pair.scores
     statements = []
@@ -40,6 +56,15 @@ def _executive_summary(pair, sub_a, sub_b, cfg, renames, shared_lits):
         "Submissions {} ({}) and {} ({}) were compared across six independent "
         "similarity channels.".format(sub_a.roll, sub_a.filename,
                                       sub_b.roll, sub_b.filename))
+    if evasion_sides and pair.evasion:
+        hidden, live = evasion_sides
+        statements.append(
+            "The measured evidence is an evasion signature, not shared live "
+            "code: submission {} is almost entirely commented-out code whose "
+            "hidden content aligns with the live code of {} at {:.0f}% "
+            "(unrelated pairs sit at 1-8%). The flag reflects this signature; "
+            "surface similarity between the two live versions is expected to "
+            "be near zero.".format(hidden.roll, live.roll, 100 * pair.evasion))
     statements.append(
         "Overall blended similarity measured {:.0f}%; the source-code channel "
         "alone measured {:.0f}% (threshold for suspicion: {:.0f}%).".format(
@@ -57,11 +82,22 @@ def _executive_summary(pair, sub_a, sub_b, cfg, renames, shared_lits):
     for e in pair.evidence:
         statements.append(e.replace("evasion match:", "Evasion indicator -")
                           .replace("forensics:", "Forensics -"))
-    n_blocks = len(_matched_block_count(sub_a, sub_b))
-    if n_blocks:
-        statements.append(
-            "{} contiguous blocks of identical code lines were located in the "
-            "side-by-side comparison below.".format(n_blocks))
+    if evasion_sides:
+        hidden, live = evasion_sides
+        n_blocks = len(_matched_lines_blocks(shadow_code_lines(hidden.source),
+                                             list(live.effective_lines)))
+        if n_blocks:
+            statements.append(
+                "{} contiguous blocks of the hidden (commented-out) code "
+                "match live code verbatim - see the evasion alignment in the "
+                "side-by-side section below.".format(n_blocks))
+    else:
+        n_blocks = len(_matched_lines_blocks(sub_a.effective_lines,
+                                             sub_b.effective_lines))
+        if n_blocks:
+            statements.append(
+                "{} contiguous blocks of identical code lines were located in "
+                "the side-by-side comparison below.".format(n_blocks))
     statements.append(
         "Both files implement the same assigned tasks; the shared assignment "
         "skeleton was statistically removed before scoring (batch damper), so "
@@ -76,10 +112,9 @@ def _executive_summary(pair, sub_a, sub_b, cfg, renames, shared_lits):
             "<div class='verdict'>" + _esc(verdict) + "</div>")
 
 
-def _matched_block_count(sub_a, sub_b):
-    sm = difflib.SequenceMatcher(None, sub_a.effective_lines,
-                                 sub_b.effective_lines, autojunk=False)
-    return [m for m in sm.get_matching_blocks() if m.size >= 6]
+def _matched_lines_blocks(lines_a, lines_b, min_block=6):
+    sm = difflib.SequenceMatcher(None, lines_a, lines_b, autojunk=False)
+    return [m for m in sm.get_matching_blocks() if m.size >= min_block]
 
 
 def write_dossier(path, sub_a, sub_b, pair, cfg, lab="the assignment"):
@@ -88,8 +123,29 @@ def write_dossier(path, sub_a, sub_b, pair, cfg, lab="the assignment"):
                                                    sub_b.effective_lines,
                                                    limit=12)
     shared_lits = sorted(set(sub_a.string_words) & set(sub_b.string_words))
-    rows_html, eq, tot, truncated = _diff_rows(
-        sub_a.effective_lines, sub_b.effective_lines)
+
+    # Section 7: for an evasion pair, the meaningful evidence is the hidden
+    # (commented-out) code aligned against the counterpart's live code —
+    # both sides normalized the same way so lines can actually match. A
+    # live-vs-live diff of an evasion pair is near-zero by construction and
+    # would contradict the verdict visually.
+    evasion = _evasion_sides(sub_a, sub_b, cfg)
+    if evasion:
+        hidden, live = evasion
+        rows_html, eq, tot, truncated = _diff_rows(
+            shadow_code_lines(hidden.source), list(live.effective_lines))
+        sec7_title = ("7. Evasion alignment &mdash; hidden (commented-out) "
+                      "code of {hr} vs live code of {lr} "
+                      "({eq} of {tot} lines identical)").format(
+            hr=_esc(hidden.roll), lr=_esc(live.roll), eq=eq, tot=tot)
+        col_a = "{} &mdash; commented-out code, unfolded".format(_esc(hidden.roll))
+        col_b = "{} &mdash; live code".format(_esc(live.roll))
+    else:
+        rows_html, eq, tot, truncated = _diff_rows(
+            sub_a.effective_lines, sub_b.effective_lines)
+        sec7_title = ("7. Side-by-side comparison "
+                      "({eq} of {tot} lines identical)").format(eq=eq, tot=tot)
+        col_a, col_b = _esc(sub_a.roll), _esc(sub_b.roll)
 
     now = time.strftime("%Y-%m-%d %H:%M")
     chan_rows = "".join(
@@ -128,11 +184,10 @@ def write_dossier(path, sub_a, sub_b, pair, cfg, lab="the assignment"):
             "({n} one-to-one swaps)</h3>{maptbl}"
             "<h3>6. Shared string literals</h3>{lits}</div>"
             "<div class='page-break'></div>"
-            "<div class='dossier'><h3>7. Side-by-side comparison "
-            "({eq} of {tot} lines identical)</h3>"
+            "<div class='dossier'><h3>{sec7}</h3>"
             "<div class='diffwrap'><table class='diff'>"
-            "<tr><th class='ln'>A#</th><th>{ra}</th>"
-            "<th class='ln'>B#</th><th>{rb}</th></tr>{rows}</table></div></div>"
+            "<tr><th class='ln'>A#</th><th>{col_a}</th>"
+            "<th class='ln'>B#</th><th>{col_b}</th></tr>{rows}</table></div></div>"
             "<div class='page-break'></div>"
             "<div class='dossier'><h3>8. Methodology (for the committee)</h3>"
             "<p>All measurements are deterministic program analysis - no "
@@ -153,14 +208,15 @@ def write_dossier(path, sub_a, sub_b, pair, cfg, lab="the assignment"):
         fa=_esc(sub_a.filename), fb=_esc(sub_b.filename),
         css=_CSS, pcss=_PRINT_CSS, now=_esc(now), lab=_esc(lab),
         summary=_executive_summary(pair, sub_a, sub_b, cfg,
-                               renames, shared_lits),
+                               renames, shared_lits,
+                               evasion_sides=evasion),
         verdict_span=_flag_span(pair.flag),
         chan=chan_rows, blended=100 * pair.blended, flag=_esc(pair.flag),
         evidence="".join("<div class='evidence'>{}</div>".format(_esc(e))
                          for e in pair.evidence),
         n=n_renames, maptbl=map_tbl or "<p class='note'>None detected.</p>",
         lits=lit_html or "<p class='note'>None.</p>",
-        eq=eq, tot=tot, rows=rows_html,
+        rows=rows_html, sec7=sec7_title, col_a=col_a, col_b=col_b,
         sus=100 * cfg.suspicious, high=100 * cfg.high)
 
     with open(path, "w", encoding="utf-8") as fh:

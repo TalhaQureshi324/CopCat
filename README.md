@@ -75,8 +75,34 @@ Optional environment variables:
 | Variable | Effect |
 |---|---|
 | `COPCAT_RESULTS_DIR` | where jobs/artifacts live (default `./copcat_results`) |
-| `COPCAT_ACCESS_TOKEN` | if set, the API requires this key (`x-copcat-key` header; the dashboard prompts for it) |
-| `BLOB_READ_WRITE_TOKEN` | switches storage from local disk to Vercel Blob (set automatically by Vercel — this is what makes the hosted deployment work) |
+| `COPCAT_ACCESS_TOKEN` | master access key — accepted in every auth mode; alone it enables simple key gating |
+| `BLOB_READ_WRITE_TOKEN` | switches storage from local disk to Vercel Blob (set automatically by Vercel) |
+| `RESEND_API_KEY` + `COPCAT_NOTIFY_EMAIL` | enables **request-a-code** access control (see below) |
+| `COPCAT_EMAIL_FROM` | sender address for access emails (default `onboarding@resend.dev`) |
+| `COPCAT_AUTH_SECRET` | HMAC secret for session tokens (defaults to a hash of your other secrets) |
+| `COPCAT_SESSION_HOURS` | how long a verified session lasts (default 24) |
+
+### Private access: request-a-code flow
+
+Set `RESEND_API_KEY` + `COPCAT_NOTIFY_EMAIL` and the deployment locks
+itself down:
+
+1. A visitor clicks **Request access code** (they may add a note saying who
+   they are).
+2. CopCat emails a 6-digit code to `COPCAT_NOTIFY_EMAIL` — *you*. One email
+   per minute max; codes live **5 minutes**, are stored only as a one-way
+   hash, burn after use, and die after 5 wrong guesses.
+3. You hand the code to the person (in person / chat) only if you approve.
+   They enter it once and get a signed 24-hour session.
+
+Free-tier email notes: [Resend](https://resend.com)'s free plan is 100
+emails/day. Without a verified domain, Resend only delivers to your own
+account's email — which is exactly this use case, since every code goes to
+you. Set `COPCAT_EMAIL_FROM` after adding a domain if you want a custom
+sender.
+
+Your own permanent access: set `COPCAT_ACCESS_TOKEN` too and use it via
+"Enter access key instead" — it bypasses the code flow entirely.
 
 ## Deploy to Vercel (free)
 

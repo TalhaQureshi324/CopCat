@@ -66,6 +66,7 @@ class PairResult:
     blended: float = 0.0
     flag: str = "CLEAN"
     evidence: list = field(default_factory=list)
+    evasion: float = 0.0    # shadow-containment score when evasion-promoted
 
     def as_csv_row(self, rank: int) -> list:
         def pct(x):

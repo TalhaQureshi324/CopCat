@@ -52,6 +52,22 @@ a { color:var(--accent); }
 <div class="sub">deterministic lab plagiarism audit &amp; rubric grading &mdash; no AI tokens</div></header>
 <main>
 
+<div class="card hidden" id="gate">
+  <h2>Private deployment</h2>
+  <p class="note">This CopCat instance is restricted. Request an access code below &mdash; the request is emailed to the owner, who hands the code to approved users. The code works for <b>5 minutes</b> after it is issued.</p>
+  <div class="row" style="margin-top:10px">
+    <input type="text" id="gate_note" placeholder="Your name / purpose (helps the owner decide)" style="flex:1;min-width:220px">
+    <button class="secondary" id="gate_req" onclick="requestCode()">Request access code</button>
+  </div>
+  <div class="row hidden" id="gate_enter_row" style="margin-top:10px">
+    <input type="text" id="gate_code" placeholder="6-digit code" maxlength="6" style="width:170px">
+    <button onclick="verifyCode()">Enter site</button>
+    <span id="gate_msg" class="note"></span>
+  </div>
+  <div id="gate_err" class="err"></div>
+  <p class="note" style="margin-top:8px">Owner or long-term user? <a href="#" onclick="enterKey(); return false;">Enter access key instead</a></p>
+</div>
+
 <div class="card">
 <h2>1. Upload</h2>
 <div class="drop" id="drop">Drop the <b>submissions ZIP</b> here (Canvas / Classroom / Moodle export, or loose .py files) &mdash; or click to browse
@@ -107,6 +123,8 @@ a { color:var(--accent); }
 </main>
 <script>
 let jobId = null, runTimer = null, retried401 = false;
+let KEY = localStorage.getItem("copcat_key") || "";
+let SESSION = localStorage.getItem("copcat_session") || "";
 const $ = id => document.getElementById(id);
 const drop = $("drop");
 drop.onclick = () => $("file").click();
@@ -131,18 +149,65 @@ function showUploadInfo() {
     : "";
 }
 
-/* fetch wrapper: attaches the access key (if set) and asks for it on 401 */
+/* fetch wrapper: attaches the access key / session (if set) and routes
+   401s into the right unlock flow */
 async function api(url, opts = {}, retry = true) {
   opts.headers = Object.assign({}, opts.headers,
-    KEY ? { "x-copcat-key": KEY } : {});
+    KEY ? { "x-copcat-key": KEY } : {},
+    SESSION ? { "x-copcat-session": SESSION } : {});
   const r = await fetch(url, opts);
   if (r.status === 401 && retry) {
+    const body = await r.clone().json().catch(() => ({}));
+    if (body.mode === "code") { showGate(); return r; }
     const k = prompt("This CopCat instance requires an access key:");
     if (k !== null) { KEY = k; localStorage.setItem("copcat_key", KEY); return api(url, opts, false); }
   }
   return r;
 }
-let KEY = localStorage.getItem("copcat_key") || "";
+
+function showGate() { $("gate").classList.remove("hidden"); }
+
+async function requestCode() {
+  $("gate_err").textContent = "";
+  $("gate_req").disabled = true;
+  try {
+    const fd = new FormData(); fd.append("note", $("gate_note").value);
+    const r = await fetch("/api/auth/request", { method: "POST", body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "request failed");
+    $("gate_enter_row").classList.remove("hidden");
+    $("gate_msg").textContent = "Code sent to the owner. Ask them for it — it expires in 5 minutes.";
+    $("gate_code").focus();
+  } catch (e) {
+    $("gate_err").textContent = String(e.message || e);
+  } finally { $("gate_req").disabled = false; }
+}
+
+async function verifyCode() {
+  $("gate_err").textContent = "";
+  const fd = new FormData(); fd.append("code", $("gate_code").value.trim());
+  const r = await fetch("/api/auth/verify", { method: "POST", body: fd });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok && d.session) {
+    SESSION = d.session;
+    localStorage.setItem("copcat_session", SESSION);
+    $("gate").classList.add("hidden");
+    refreshHistory();
+    const id = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
+    if (id) openJob(id);
+  } else {
+    $("gate_err").textContent = d.error || "verification failed";
+  }
+}
+
+function enterKey() {
+  const k = prompt("Access key:");
+  if (k !== null) {
+    KEY = k; localStorage.setItem("copcat_key", KEY);
+    $("gate").classList.add("hidden");
+    refreshHistory();
+  }
+}
 
 function setBusy(b) {
   ["b-audit", "b-grade", "b-both"].forEach(id => $(id).disabled = b);
@@ -266,14 +331,19 @@ function render(d) {
   $("linkindex").href = `/api/jobs/${jobId}/report/index.html`;
   $("linkaudit").href = `/api/jobs/${jobId}/report/copcat_audit.txt`;
   const S = d.summary || {};
-  const flagged = S.pairs || [];
+  const flagged = (S.pairs || []).slice();
+  const rank = {HIGH_PROBABILITY_PLAGIARISM: 0, SUSPICIOUS: 1};
+  flagged.sort((p1, p2) => (rank[p1.flag] ?? 2) - (rank[p2.flag] ?? 2)
+    || p2.blended - p1.blended);
   $("linkindex").style.display = flagged.length ? "" : "none";
   $("linkaudit").style.display = flagged.length ? "" : "none";
   $("dlcsv").style.display = (S.gradebook || []).length ? "" : "none";
   const tbody = $("pairs").tBodies[0]; tbody.innerHTML = "";
   for (const p of flagged) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${p.a}</td><td>${p.b}</td><td>${p.blended}%</td>` +
+    tr.innerHTML = `<td>${p.a}</td><td>${p.b}</td>` +
+      `<td>${p.blended}%${p.evasion != null ?
+        ` <span class="note">(evasion ${p.evasion}%)</span>` : ""}</td>` +
       `<td><span class="flag-${p.flag}">${p.flag}</span></td>` +
       `<td><a href="/api/jobs/${jobId}/dossier/${p.a}/${p.b}" target="_blank">open dossier</a></td>`;
     tbody.appendChild(tr);
@@ -312,6 +382,10 @@ window.addEventListener("hashchange", () => {
   const id = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
   if (id && id !== jobId) openJob(id);
 });
+
+fetch("/api/auth/mode").then(r => r.json()).then(d => {
+  if (d.mode === "code" && !SESSION && !KEY) showGate();
+}).catch(() => {});
 
 refreshHistory();
 const initial = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];

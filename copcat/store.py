@@ -133,6 +133,23 @@ class DiskStore:
         except OSError:
             pass
 
+    # -- small JSON documents (used for auth challenges) -------------------
+    def put_json(self, name, obj):
+        d = os.path.join(self.root, "_auth")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, name + ".json"), "w", encoding="utf-8") as fh:
+            json.dump(obj, fh)
+
+    def get_json(self, name):
+        path = os.path.join(self.root, "_auth", name + ".json")
+        if not os.path.isfile(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh)
+        except (OSError, ValueError):
+            return None
+
 
 class BlobStore:
     """Vercel Blob backend for serverless hosting (stdlib REST client)."""
@@ -295,6 +312,19 @@ class BlobStore:
         if meta:
             urls.append(meta)
         self._delete(urls)
+
+    def put_json(self, name, obj):
+        data = json.dumps(obj).encode("utf-8")
+        self._put("_auth/" + name, data, "application/json")
+
+    def get_json(self, name):
+        blobs = self._list("_auth/" + name, limit=1)
+        if not blobs:
+            return None
+        try:
+            return json.loads(self._get(blobs[0]["url"]))
+        except (RuntimeError, ValueError):
+            return None
 
 
 def get_store():

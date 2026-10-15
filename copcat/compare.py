@@ -124,6 +124,7 @@ def apply_evasion_rule(pairs, subs, cfg):
                     hits[roll] = (p, p.scores["shadow"][0])
     for roll, (p, score) in hits.items():
         other = p.roll_b if p.roll_a == roll else p.roll_a
+        p.evasion = score
         p.evidence.append(
             "evasion match: commented-out code shadow of {} aligns with live "
             "code of {} at {:.0%} ({} folded tokens; unrelated pairs sit at "

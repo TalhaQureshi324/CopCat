@@ -16,8 +16,13 @@ hosted), so job history survives page refreshes and server restarts.
 Run locally:  copcat web   (or: uvicorn copcat.webapp:app --port 8000)
 """
 
+import hashlib
+import hmac
+import json
 import os
+import secrets
 import time
+import urllib.request
 import uuid
 
 from .models import AuditConfig
@@ -36,14 +41,153 @@ app = FastAPI(title="CopCat", docs_url=None, redoc_url=None)
 WEB_ROOT = os.path.dirname(os.path.abspath(__file__))
 _STALE_RUN_S = 15 * 60          # a "running" job older than this is retryable
 
+AUTH_CODE_TTL_S = 5 * 60        # access code validity (the owner hands it over)
+AUTH_MAX_ATTEMPTS = 5           # wrong-code tries before the code is burned
+
+
+# --------------------------------------------------------------------------
+# access control
+# --------------------------------------------------------------------------
+def _auth_mode():
+    """'code': request -> owner's email -> 5-min code -> session.
+    'key': single shared master key.  'open': no gate configured."""
+    if os.environ.get("RESEND_API_KEY") and os.environ.get("COPCAT_NOTIFY_EMAIL"):
+        return "code"
+    if os.environ.get("COPCAT_ACCESS_TOKEN"):
+        return "key"
+    return "open"
+
+
+def _secret():
+    material = os.environ.get("COPCAT_AUTH_SECRET") or "".join(filter(None, [
+        os.environ.get("BLOB_READ_WRITE_TOKEN"),
+        os.environ.get("COPCAT_ACCESS_TOKEN")])) or "copcat-insecure-default"
+    return hashlib.sha256(material.encode("utf-8")).digest()
+
+
+def _code_hash(code):
+    return hashlib.sha256(_secret() + code.strip().encode("utf-8")).hexdigest()
+
+
+def _session_token():
+    hours = float(os.environ.get("COPCAT_SESSION_HOURS") or 24)
+    exp = str(int(time.time() + hours * 3600))
+    sig = hmac.new(_secret(), exp.encode("utf-8"), hashlib.sha256).hexdigest()
+    return "{}.{}".format(exp, sig)
+
+
+def _session_ok(token):
+    try:
+        exp, sig = token.split(".", 1)
+        want = hmac.new(_secret(), exp.encode("utf-8"),
+                        hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, want) and int(exp) > time.time()
+    except Exception:
+        return False
+
+
+def _send_access_code(to, code, note):
+    """Email the code to the deployment owner via the Resend REST API.
+    Monkeypatched in tests."""
+    body = json.dumps({
+        "from": os.environ.get("COPCAT_EMAIL_FROM", "onboarding@resend.dev"),
+        "to": [to],
+        "subject": "CopCat access code: {}".format(code),
+        "html": (
+            "<p>A visitor requested access to your CopCat deployment.</p>"
+            "<p style='font-size:26px;font-weight:700;letter-spacing:4px'>{}</p>"
+            "<p>Share this code only with people you trust. It expires in "
+            "<b>5 minutes</b>.{}<p><span style='color:#888'>No code was "
+            "stored anywhere except a one-way hash on your own deployment."
+            "</span></p>".format(
+                code, "<p>Visitor note: <i>{}</i></p>".format(note)
+                if note else ""))
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails", data=body, method="POST",
+        headers={"authorization": "Bearer " + os.environ["RESEND_API_KEY"],
+                 "content-type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        resp.read()
+
 
 def _auth(request: Request):
-    """Optional shared-key gate. Set COPCAT_ACCESS_TOKEN to require it."""
-    token = os.environ.get("COPCAT_ACCESS_TOKEN")
-    if token and request.headers.get("x-copcat-key") != token:
-        return JSONResponse({"error": "unauthorized: access key required"},
-                            status_code=401)
-    return None
+    """Gate: None if allowed, else a 401 naming the auth mode. The master
+    key (COPCAT_ACCESS_TOKEN) is accepted in every mode."""
+    if _auth_mode() == "open":
+        return None
+    master = os.environ.get("COPCAT_ACCESS_TOKEN")
+    if master and request.headers.get("x-copcat-key") == master:
+        return None
+    if _auth_mode() == "key":
+        return JSONResponse(
+            {"error": "unauthorized: access key required", "mode": "key"},
+            status_code=401)
+    if _session_ok(request.headers.get("x-copcat-session") or ""):
+        return None
+    return JSONResponse(
+        {"error": "unauthorized: access code required", "mode": "code"},
+        status_code=401)
+
+
+@app.get("/api/auth/mode")
+async def auth_mode():
+    return {"mode": _auth_mode()}
+
+
+@app.post("/api/auth/request")
+async def auth_request(request: Request, note: str = Form("")):
+    if _auth_mode() != "code":
+        return JSONResponse(
+            {"error": "code authentication is not configured on this "
+                      "deployment"}, status_code=400)
+    store, err = _store_or_error()
+    if err:
+        return err
+    now = time.time()
+    pending = store.get_json("challenge")
+    if pending and now - pending.get("created", 0) < 60:
+        # one email per minute max — no inbox flooding
+        return {"sent": True, "retry_after": int(
+            pending["created"] + 60 - now)}
+    code = "{:06d}".format(secrets.randbelow(1000000))
+    store.put_json("challenge", {
+        "code_hash": _code_hash(code), "created": now,
+        "expires": now + AUTH_CODE_TTL_S, "attempts": 0})
+    try:
+        _send_access_code(os.environ["COPCAT_NOTIFY_EMAIL"], code, note)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": "could not send the access email: {}".format(exc)},
+            status_code=503)
+    return {"sent": True}
+
+
+@app.post("/api/auth/verify")
+async def auth_verify(request: Request, code: str = Form("")):
+    if _auth_mode() != "code":
+        return JSONResponse(
+            {"error": "code authentication is not configured"}, status_code=400)
+    store, err = _store_or_error()
+    if err:
+        return err
+    ch = store.get_json("challenge")
+    if not ch or time.time() > ch.get("expires", 0):
+        return JSONResponse(
+            {"error": "no active access code — request a new one",
+             "mode": "code"}, status_code=401)
+    if hmac.compare_digest(_code_hash(code), ch.get("code_hash", "")):
+        ch["expires"] = 0                       # burn the code after use
+        store.put_json("challenge", ch)
+        return {"session": _session_token(), "mode": "code"}
+    ch["attempts"] = ch.get("attempts", 0) + 1
+    if ch["attempts"] >= AUTH_MAX_ATTEMPTS:
+        ch["expires"] = 0                       # too many wrong tries: burn
+    store.put_json("challenge", ch)
+    left = max(0, AUTH_MAX_ATTEMPTS - ch["attempts"])
+    return JSONResponse(
+        {"error": "wrong code ({} attempts left)".format(left),
+         "mode": "code"}, status_code=401)
 
 
 def _store_or_error():
@@ -93,7 +237,8 @@ def _execute(store, meta, mode, preserve):
             pairs = run_audit(paths["submissions"], cfg, out_dir, workers=1)
             summary["pairs"] = [
                 {"a": p.roll_a, "b": p.roll_b,
-                 "blended": round(100 * p.blended, 1), "flag": p.flag}
+                 "blended": round(100 * p.blended, 1), "flag": p.flag,
+                 "evasion": round(100 * p.evasion, 1) if p.evasion else None}
                 for p in pairs if p.flag != "CLEAN"]
         if mode in ("grade", "both"):
             if not paths.get("rubric"):
