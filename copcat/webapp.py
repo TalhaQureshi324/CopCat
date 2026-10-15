@@ -22,6 +22,7 @@ import json
 import os
 import secrets
 import time
+import urllib.error
 import urllib.request
 import uuid
 
@@ -107,8 +108,19 @@ def _send_access_code(to, code, note):
         "https://api.resend.com/emails", data=body, method="POST",
         headers={"authorization": "Bearer " + os.environ["RESEND_API_KEY"],
                  "content-type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+        except Exception:
+            pass
+        # surface Resend's own explanation (e.g. "you can only send
+        # testing emails to your own email address") in the dashboard
+        raise RuntimeError("Resend returned {}: {}".format(
+            exc.code, detail or exc.reason)) from exc
 
 
 def _auth(request: Request):
