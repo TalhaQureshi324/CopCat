@@ -22,3 +22,7 @@ copcat_results/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Vercel CLI local artifacts
+.vercel/
+uv.lock

@@ -7,5 +7,7 @@ reports_lab03
 copcat_results
 .pytest_cache
 .github
+build
+dist
 *.md
 LICENSE
