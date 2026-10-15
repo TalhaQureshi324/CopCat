@@ -142,22 +142,29 @@ async def create_job(request: Request,
     if err:
         return err
     job_id = uuid.uuid4().hex[:12]
-    uploads = {"submissions": store.save_upload(
-        job_id, "submissions", submissions.filename or "submissions.zip",
-        await submissions.read())}
-    if rubric and rubric.filename:
-        uploads["rubric"] = store.save_upload(job_id, "rubric",
-                                              rubric.filename,
-                                              await rubric.read())
-    if starter and starter.filename:
-        uploads["starter"] = store.save_upload(job_id, "starter",
-                                               starter.filename,
-                                               await starter.read())
-    store.save_meta({"job_id": job_id, "status": "uploaded", "mode": None,
-                     "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-                     "uploads": uploads, "preserve": "",
-                     "summary": None, "runtime_s": None, "error": None,
-                     "result_urls": {}})
+    try:
+        uploads = {"submissions": store.save_upload(
+            job_id, "submissions", submissions.filename or "submissions.zip",
+            await submissions.read())}
+        if rubric and rubric.filename:
+            uploads["rubric"] = store.save_upload(job_id, "rubric",
+                                                  rubric.filename,
+                                                  await rubric.read())
+        if starter and starter.filename:
+            uploads["starter"] = store.save_upload(job_id, "starter",
+                                                   starter.filename,
+                                                   await starter.read())
+        store.save_meta({"job_id": job_id, "status": "uploaded",
+                         "mode": None,
+                         "created": time.strftime("%Y-%m-%d %H:%M:%S"),
+                         "uploads": uploads, "preserve": "",
+                         "summary": None, "runtime_s": None, "error": None,
+                         "result_urls": {}})
+    except Exception as exc:
+        return JSONResponse(
+            {"error": "upload failed — {}: {}".format(
+                type(exc).__name__, exc)},
+            status_code=500)
     return {"job_id": job_id}
 
 
@@ -196,7 +203,13 @@ async def list_jobs(request: Request):
     store, err = _store_or_error()
     if err:
         return err
-    rows = [_meta_view(m) for m in store.list_jobs()]
+    try:
+        rows = [_meta_view(m) for m in store.list_jobs()]
+    except Exception as exc:
+        return JSONResponse(
+            {"error": "listing jobs failed — {}: {}".format(
+                type(exc).__name__, exc)},
+            status_code=500)
     rows.sort(key=lambda m: m.get("created") or "", reverse=True)
     return {"jobs": rows}
 
