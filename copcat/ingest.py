@@ -15,7 +15,11 @@ def extract_roll(filename):
 
 def discover(directory, extra_excludes=()):
     """Sorted list of *.py paths in `directory` (non-recursive), excluding
-    copcat's own artifacts and anything under an output folder."""
+    copcat's own artifacts and anything under an output folder.
+
+    Deliberately Python-only: this feeds the grading engine (Python
+    sandbox).  The audit pipeline uses loader.collect() instead, which
+    also accepts C/C++ submissions."""
     excludes = {"copcat_audit.csv", "copcat_audit.txt",
                 "lab02_evaluation_report.csv", "plagiarism_audit.txt"}
     excludes.update(extra_excludes)

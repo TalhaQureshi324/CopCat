@@ -20,8 +20,8 @@ import zipfile
 
 from .forensics import scan_source
 from .ingest import extract_roll
+from .langs import is_source
 
-_PY_RE = re.compile(r"\.py$", re.IGNORECASE)
 IPYNB_RE = re.compile(r"\.ipynb$", re.IGNORECASE)
 LMS_SUBMISSION_RE = re.compile(
     r"^(?P<name>.+?)_(?P<id>\d+)_(?:assignsubmission|attempt).*$", re.IGNORECASE)
@@ -106,7 +106,7 @@ def _collect_dir(root):
         for name in sorted(files):
             full = os.path.join(dirpath, name)
             rel = os.path.relpath(full, root)
-            if _PY_RE.search(name):
+            if is_source(name):
                 with open(full, encoding="utf-8-sig", errors="replace") as fh:
                     src = fh.read()
                 roll = extract_roll(name)
@@ -146,7 +146,7 @@ def _collect_zip(zip_path):
                         out.extend(_collect_zip(full))
                     except zipfile.BadZipFile:
                         continue
-                elif _PY_RE.search(name):
+                elif is_source(name):
                     with open(full, encoding="utf-8-sig", errors="replace") as fh:
                         src = fh.read()
                     roll = extract_roll(name)

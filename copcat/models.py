@@ -30,6 +30,7 @@ class Submission:
     filename: str
     path: str
     source: str
+    lang: str = "python"                                # "python" | "cpp"
     n_lines: int = 0
     n_comment_lines: int = 0
     n_code_lines: int = 0
