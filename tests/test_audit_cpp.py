@@ -160,15 +160,15 @@ def test_cpp_audit_flags_renamed_copy(tmp_path):
     pairs = run_audit(str(tmp), AuditConfig(), str(tmp_path / "out"),
                       workers=1)
     by_pair = {(p.roll_a, p.roll_b): p for p in pairs}
-    ab = by_pair.get(("ali_bscs30101_a", "sara_bscs30102_b")) or \
-        by_pair.get(("sara_bscs30102_b", "ali_bscs30101_a"))
+    ab = by_pair.get(("BSCS30101", "BSCS30102")) or \
+        by_pair.get(("BSCS30102", "BSCS30101"))
     assert ab is not None, "renamed copy pair missing from results"
     assert ab.scores["ast"][0] >= 0.6, "rename-invariant channel missed the copy"
     assert ab.blended >= 0.45 and ab.flag != "CLEAN"
 
-    ac = by_pair.get(("ali_bscs30101_a", "omar_bscs30103_c")) or \
-        by_pair.get(("omar_bscs30103_c", "ali_bscs30101_a"))
-    bc = by_pair.get(("sara_bscs30102_b", "omar_bscs30103_c")) or \
-        by_pair.get(("omar_bscs30103_c", "sara_bscs30102_b"))
+    ac = by_pair.get(("BSCS30101", "BSCS30103")) or \
+        by_pair.get(("BSCS30103", "BSCS30101"))
+    bc = by_pair.get(("BSCS30102", "BSCS30103")) or \
+        by_pair.get(("BSCS30103", "BSCS30102"))
     assert ac.blended < 0.45 and bc.blended < 0.45
     assert ac.flag == "CLEAN" and bc.flag == "CLEAN"
