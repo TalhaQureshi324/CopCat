@@ -1,0 +1,246 @@
+# CopCat rubric - Lab 05: Uninformed Search (DLS, IDS, Vault cheapest-shallowest)
+# Resilient authoring: checks behavioural compliance, not implementation quirks.
+# Aliases are honoured automatically by the engine for renamed functions.
+
+lab: ai_lab05
+title: "Uninformed Search: DLS, IDS & the Vault-breaker"
+total_marks: 10.0
+
+settings:
+  timeout_s: 10
+  memory_mb: 512
+
+tasks:
+  # =====================================================================
+  - id: T1
+    weight: 2.5
+    title: "Depth-Limited Search (DLS)"
+    checks:
+      - id: dls_exists
+        type: regex_present
+        pattern: "def\\s+dls_search\\b"
+        deduct: 0.5
+        fail: "dls_search(tree, start, goal, depth_limit) is not defined"
+
+      - id: dls_cutoff
+        type: functional
+        construct: "object()"
+        set_expr: |
+          tree = {
+              'S': ['A', 'B', 'C'],
+              'A': ['D', 'E'],
+              'B': [],
+              'C': ['F', 'G'],
+              'D': ['H'],
+              'E': [],
+              'F': ['I'],
+              'G': [],
+              'H': [],
+              'I': ['J'],
+              'J': [],
+          }
+        call: "dls_search(tree, 'S', 'J', 3) is None"
+        expect: truthy
+        deduct: 0.75
+        fail: "goal at depth 4 must NOT be found when depth_limit is 3 (cut-off not enforced)"
+
+      - id: dls_path_within_limit
+        type: functional
+        construct: "object()"
+        set_expr: |
+          tree = {
+              'S': ['A', 'B', 'C'],
+              'A': ['D', 'E'],
+              'B': [],
+              'C': ['F', 'G'],
+              'D': ['H'],
+              'E': [],
+              'F': ['I'],
+              'G': [],
+              'H': [],
+              'I': ['J'],
+              'J': [],
+          }
+        call: "dls_search(tree, 'S', 'J', 4) == ['S', 'C', 'F', 'I', 'J']"
+        expect: truthy
+        deduct: 0.75
+        fail: "dls_search(tree, 'S', 'J', 4) must return ['S', 'C', 'F', 'I', 'J']"
+
+      - id: dls_start_is_goal
+        type: functional
+        construct: "object()"
+        set_expr: |
+          tree = {'S': ['A'], 'A': []}
+        call: "dls_search(tree, 'S', 'S', 0) == ['S']"
+        expect: truthy
+        deduct: 0.5
+        fail: "start == goal must return [start] at depth 0"
+
+  # =====================================================================
+  - id: T2
+    weight: 3.0
+    title: "Iterative Deepening Search (IDS)"
+    checks:
+      - id: ids_exists
+        type: regex_present
+        pattern: "def\\s+ids_search\\b"
+        deduct: 0.5
+        fail: "ids_search(tree, start, goal, max_depth) is not defined"
+
+      - id: ids_prints_attempts
+        type: regex_present
+        pattern: "Trying depth limit|depth limit.*print|print.*depth limit"
+        deduct: 0.5
+        fail: "IDS must print each depth limit attempted (e.g. 'Trying depth limit 0...')"
+
+      - id: ids_sample
+        type: functional
+        construct: "object()"
+        set_expr: |
+          tree = {
+              'S': ['A', 'B', 'C'],
+              'A': ['D', 'E'],
+              'B': [],
+              'C': ['F', 'G'],
+              'D': ['H'],
+              'E': [],
+              'F': ['I'],
+              'G': [],
+              'H': [],
+              'I': ['J'],
+              'J': [],
+          }
+        call: "ids_search(tree, 'S', 'J', 5) == (['S', 'C', 'F', 'I', 'J'], 4)"
+        expect: truthy
+        deduct: 1.25
+        fail: "ids_search(tree, 'S', 'J', 5) must return (['S', 'C', 'F', 'I', 'J'], 4)"
+
+      - id: ids_maxdepth_exceeded
+        type: functional
+        construct: "object()"
+        set_expr: |
+          tree = {
+              'S': ['A', 'B', 'C'],
+              'A': ['D', 'E'],
+              'B': [],
+              'C': ['F', 'G'],
+              'D': ['H'],
+              'E': [],
+              'F': ['I'],
+              'G': [],
+              'H': [],
+              'I': ['J'],
+              'J': [],
+          }
+        call: "ids_search(tree, 'S', 'J', 2) is None"
+        expect: truthy
+        deduct: 0.75
+        fail: "IDS must return None when the goal is not reachable within max_depth"
+
+  # =====================================================================
+  - id: T3
+    weight: 4.5
+    title: "The Vault-breaker's Dilemma (shallowest first, cheapest on ties)"
+    checks:
+      - id: vault_exists
+        type: regex_present
+        pattern: "def\\s+crack_vault\\b"
+        deduct: 0.5
+        fail: "crack_vault(vault, entry, prize) is not defined"
+
+      - id: vault_result_shape
+        type: functional
+        construct: "object()"
+        set_expr: |
+          vault = {
+              'Entry': ['A', 'B', 'C', 'G', 'J', 'K', 'N'],
+              'A': ['D'],
+              'B': ['D', 'E'],
+              'C': ['Vault', 'Vault'],
+              'D': ['Vault'],
+              'E': ['Vault'],
+              'G': ['H'],
+              'H': ['I'],
+              'I': ['Vault'],
+              'J': ['Vault'],
+              'K': ['L'],
+              'L': ['M'],
+              'M': ['Vault'],
+              'N': ['O'],
+              'O': ['P'],
+              'P': ['Q'],
+              'Q': ['Vault'],
+              'Vault': [],
+          }
+        call: "isinstance(crack_vault(vault, 'Entry', 'Vault'), tuple) and len(crack_vault(vault, 'Entry', 'Vault')) == 3"
+        expect: truthy
+        deduct: 0.5
+        fail: "crack_vault must return a (path, depth, cost) triple"
+
+      - id: vault_sample
+        type: functional
+        construct: "object()"
+        set_expr: |
+          vault = {
+              'Entry': ['A', 'B', 'C', 'G', 'J', 'K', 'N'],
+              'A': ['D'],
+              'B': ['D', 'E'],
+              'C': ['Vault', 'Vault'],
+              'D': ['Vault'],
+              'E': ['Vault'],
+              'G': ['H'],
+              'H': ['I'],
+              'I': ['Vault'],
+              'J': ['Vault'],
+              'K': ['L'],
+              'L': ['M'],
+              'M': ['Vault'],
+              'N': ['O'],
+              'O': ['P'],
+              'P': ['Q'],
+              'Q': ['Vault'],
+              'Vault': [],
+          }
+        call: "crack_vault(vault, 'Entry', 'Vault') == (['Entry', 'C', 'Vault'], 2, 1)"
+        expect: truthy
+        deduct: 1.5
+        fail: "sample must return (['Entry', 'C', 'Vault'], 2, 1) - shallowest floor first, C wins the alphabetical tie"
+
+      - id: vault_entry_is_prize
+        type: functional
+        construct: "object()"
+        set_expr: |
+          vault = {'Entry': ['A'], 'A': ['Vault'], 'Vault': []}
+        call: "crack_vault(vault, 'Entry', 'Entry') is not None and crack_vault(vault, 'Entry', 'Entry')[-1] == 0"
+        expect: truthy
+        deduct: 1.0
+        fail: "entry == prize must return immediately with cost 0"
+
+      - id: vault_unreachable
+        type: functional
+        construct: "object()"
+        set_expr: |
+          vault = {
+              'Entry': ['A', 'B', 'C', 'G', 'J', 'K', 'N'],
+              'A': ['D'],
+              'B': ['D', 'E'],
+              'C': ['Vault', 'Vault'],
+              'D': ['Vault'],
+              'E': ['Vault'],
+              'G': ['H'],
+              'H': ['I'],
+              'I': ['Vault'],
+              'J': ['Vault'],
+              'K': ['L'],
+              'L': ['M'],
+              'M': ['Vault'],
+              'N': ['O'],
+              'O': ['P'],
+              'P': ['Q'],
+              'Q': ['Vault'],
+              'Vault': [],
+          }
+        call: "crack_vault(vault, 'H', 'Entry') is None"
+        expect: truthy
+        deduct: 1.0
+        fail: "an unreachable prize must return None"

@@ -7,6 +7,7 @@
 #   5. Zero-tolerance only for stated constraints (deque ban, memoryless purity)
 
 lab: ai_lab03
+total_marks: 10.0
 title: "Data Structures (Stacks & Queues) & Reflex Agents"
 total_marks: 10.0
 

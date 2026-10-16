@@ -5,6 +5,7 @@
 # message to the auto-generated Deduction_Report.
 
 lab: ai_lab02
+total_marks: 10.0
 settings:
   timeout_s: 10        # per-submission sandbox budget (menus can't hang us:
   memory_mb: 512       # input() raises EOFError inside the sandbox)

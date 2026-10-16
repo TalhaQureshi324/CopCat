@@ -1,0 +1,174 @@
+# CopCat rubric - Lab 06: Min-Priority Queue, UCS & Greedy Best-First Search
+# Resilient authoring: checks behavioural compliance, not implementation quirks.
+# Aliases are honoured automatically by the engine for renamed functions/classes.
+
+lab: ai_lab06
+title: "Uniform Cost Search & Greedy Best-First Search"
+total_marks: 10.0
+
+settings:
+  timeout_s: 10
+  memory_mb: 512
+
+tasks:
+  # =====================================================================
+  - id: T1
+    weight: 4.0
+    title: "Min-Priority Queue (binary min-heap, no heapq)"
+    checks:
+      - id: mpq_class_exists
+        type: regex_present
+        pattern: "class\\s+MinPriorityQueue\\b"
+        deduct: 0.5
+        fail: "class MinPriorityQueue is not defined"
+
+      - id: mpq_api_present
+        type: regex_present
+        pattern: "def\\s+push\\b|def\\s+pop\\b|def\\s+peek\\b|def\\s+is_empty\\b"
+        deduct: 0.5
+        fail: "MinPriorityQueue must define push / pop / peek / is_empty (and __len__, _sift_up, _sift_down)"
+
+      - id: mpq_sift_helpers
+        type: regex_present
+        pattern: "def\\s+_sift_up\\b[\\s\\S]*def\\s+_sift_down\\b|def\\s+_sift_down\\b[\\s\\S]*def\\s+_sift_up\\b"
+        deduct: 0.25
+        fail: "_sift_up(i) and _sift_down(i) helper methods are required"
+
+      - id: mpq_no_heapq
+        type: forbidden_pattern
+        pattern: "import\\s+heapq|from\\s+heapq|queue\\.PriorityQueue|from\\s+queue\\s+import"
+        deduct: 0.5
+        fail: "heapq / queue.PriorityQueue are forbidden - the heap must be hand-built"
+
+      - id: mpq_peek_len
+        type: functional
+        construct: "object()"
+        set_expr: |
+          for p, x in [(5, 'e'), (1, 'a'), (3, 'c'), (2, 'b'), (3, 'c2')]:
+              pq.push(p, x)
+        call: "pq.peek() == (1, 'a') and len(pq) == 5"
+        expect: truthy
+        deduct: 0.5
+        fail: "peek() must return (1, 'a') and len(pq) must be 5 after the five pushes"
+
+      - id: mpq_pop_order_stable
+        type: functional
+        construct: "object()"
+        set_expr: |
+          for p, x in [(5, 'e'), (1, 'a'), (3, 'c'), (2, 'b'), (3, 'c2')]:
+              pq.push(p, x)
+        call: "[pq.pop() for _ in range(5)] == [(1, 'a'), (2, 'b'), (3, 'c'), (3, 'c2'), (5, 'e')]"
+        expect: truthy
+        deduct: 1.0
+        fail: "pop() must return smallest priority first; equal priorities leave in insertion order ((3,'c') before (3,'c2'))"
+
+      - id: mpq_empty_raises
+        type: functional
+        construct: "object()"
+        set_expr: ""
+        call: "pq.pop()"
+        expect: "raises:IndexError"
+        deduct: 0.75
+        fail: "pop() on an empty queue must raise IndexError"
+
+  # =====================================================================
+  - id: T2a
+    weight: 3.0
+    title: "Uniform Cost Search (UCS)"
+    checks:
+      - id: ucs_exists
+        type: regex_present
+        pattern: "def\\s+ucs\\b"
+        deduct: 0.5
+        fail: "ucs(graph, start, goal) is not defined"
+
+      - id: ucs_uses_own_queue
+        type: regex_present
+        pattern: "MinPriorityQueue\\s*\\("
+        deduct: 0.5
+        fail: "UCS must use the MinPriorityQueue class from Task 1"
+
+      - id: ucs_sample
+        type: functional
+        construct: "object()"
+        set_expr: |
+          graph = {
+              'S': [('A', 2), ('B', 5)],
+              'A': [('S', 2), ('C', 4), ('D', 7)],
+              'B': [('S', 5), ('D', 2)],
+              'C': [('A', 4), ('G', 8)],
+              'D': [('A', 7), ('B', 2), ('G', 3)],
+              'G': [('C', 8), ('D', 3)],
+          }
+        call: "ucs(graph, 'S', 'G') == (['S', 'B', 'D', 'G'], 10, ['S', 'A', 'B', 'C', 'D', 'G'])"
+        expect: truthy
+        deduct: 1.5
+        fail: "sample must return (['S','B','D','G'], 10, ['S','A','B','C','D','G']) - cheapest path, its cost, and the expansion order (outdated heap entries skipped)"
+
+      - id: ucs_no_path
+        type: functional
+        construct: "object()"
+        set_expr: |
+          graph = {
+              'S': [('A', 2)],
+              'A': [('S', 2)],
+              'G': [('H', 1)],
+              'H': [('G', 1)],
+          }
+        call: "ucs(graph, 'S', 'G')[0] is None and ucs(graph, 'S', 'G')[1] is None"
+        expect: truthy
+        deduct: 0.5
+        fail: "if no path exists, ucs must return (None, None, expansion_order)"
+
+  # =====================================================================
+  - id: T2b
+    weight: 3.0
+    title: "Greedy Best-First Search (GBFS)"
+    checks:
+      - id: gbfs_exists
+        type: regex_present
+        pattern: "def\\s+gbfs\\b"
+        deduct: 0.5
+        fail: "gbfs(graph, h, start, goal) is not defined"
+
+      - id: gbfs_uses_own_queue
+        type: regex_present
+        pattern: "MinPriorityQueue\\s*\\("
+        deduct: 0.5
+        fail: "GBFS must use the MinPriorityQueue class from Task 1"
+
+      - id: gbfs_sample
+        type: functional
+        construct: "object()"
+        set_expr: |
+          graph = {
+              'S': [('A', 2), ('B', 5)],
+              'A': [('S', 2), ('C', 4), ('D', 7)],
+              'B': [('S', 5), ('D', 2)],
+              'C': [('A', 4), ('G', 8)],
+              'D': [('A', 7), ('B', 2), ('G', 3)],
+              'G': [('C', 8), ('D', 3)],
+          }
+          h = {'S': 7, 'A': 3, 'B': 6, 'C': 2, 'D': 4, 'G': 0}
+        call: "gbfs(graph, h, 'S', 'G') == (['S', 'A', 'C', 'G'], 14, ['S', 'A', 'C', 'G'])"
+        expect: truthy
+        deduct: 1.5
+        fail: "sample must return (['S','A','C','G'], 14, ['S','A','C','G']) - h(n) drives expansion, but the reported cost is the real edge-cost sum"
+
+      - id: gbfs_real_cost_not_h
+        type: functional
+        construct: "object()"
+        set_expr: |
+          graph = {
+              'S': [('A', 2), ('B', 5)],
+              'A': [('S', 2), ('C', 4), ('D', 7)],
+              'B': [('S', 5), ('D', 2)],
+              'C': [('A', 4), ('G', 8)],
+              'D': [('A', 7), ('B', 2), ('G', 3)],
+              'G': [('C', 8), ('D', 3)],
+          }
+          h = {'S': 7, 'A': 3, 'B': 6, 'C': 2, 'D': 4, 'G': 0}
+        call: "gbfs(graph, h, 'S', 'G')[1] == 14 and gbfs(graph, h, 'S', 'G')[1] != 0"
+        expect: truthy
+        deduct: 0.5
+        fail: "the returned cost must be the real sum of edge costs (14), not a heuristic value"

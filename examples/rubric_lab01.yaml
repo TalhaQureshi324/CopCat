@@ -125,23 +125,23 @@ tasks:
     checks:
       - id: t4_factorial
         type: functional
-        construct: ""
-        call: "factorial(5)"
+        construct: "object()"
+        call: "factorial(5) == 120"
         expect: truthy
         deduct: 0.4
         fail: "factorial(5) does not return 120"
 
       - id: t4_palindrome
         type: functional
-        construct: ""
-        call: "is_palindrome('madam')"
+        construct: "object()"
+        call: "is_palindrome('madam') == True"
         expect: truthy
         deduct: 0.4
         fail: "is_palindrome('madam') does not return True"
 
       - id: t4_fibonacci
         type: functional
-        construct: ""
+        construct: "object()"
         call: "fibonacci(6) == [0, 1, 1, 2, 3, 5]"
         expect: truthy
         deduct: 0.4
@@ -149,7 +149,7 @@ tasks:
 
       - id: t4_largest
         type: functional
-        construct: ""
+        construct: "object()"
         call: "find_largest([5, 12, 99, 4]) == 99"
         expect: truthy
         deduct: 0.4
@@ -306,5 +306,5 @@ tasks:
       - id: t8_age_remove
         type: regex_present
         pattern: "(?i)del\\s+student|\\.pop\\s*\\(\\s*['\"]age|del.*age"
-        deduct: 0.15
+        deduct: 0.1
         fail: "Age key not removed from dictionary"
