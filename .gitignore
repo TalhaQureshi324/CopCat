@@ -29,3 +29,6 @@ uv.lock
 
 # jsdom (frontend smoke test)
 tests/ui/node_modules/
+
+# local audit output for lab04 investigation
+reports_lab04/

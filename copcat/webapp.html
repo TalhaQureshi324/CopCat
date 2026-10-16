@@ -455,6 +455,14 @@ async function requestCode() {
     $("reqerr").classList.remove("hidden");
   } finally { $("reqbtn").disabled = false; }
 }
+function setCookie(name, value, days) {
+  document.cookie = name + "=" + encodeURIComponent(value) +
+    "; path=/; max-age=" + (days * 86400) + "; samesite=lax";
+}
+function clearCookie(name) {
+  document.cookie = name + "=; path=/; max-age=0; samesite=lax";
+}
+
 /* six code boxes: auto-advance, backspace, paste; Enter submits */
 document.querySelectorAll("#codeEntry input").forEach((inp, i, all) => {
   inp.addEventListener("input", () => {
@@ -488,6 +496,7 @@ async function unlockCode() {
     const d = await r.json().catch(() => ({}));
     if (r.ok && d.session) {
       SESSION = d.session; localStorage.setItem("copcat_session", SESSION);
+      setCookie("copcat_session", SESSION, 1);   // carry session into new tabs
       enterApp();
     } else {
       $("lockerr").textContent = d.error || "That code did not work.";
@@ -508,6 +517,7 @@ async function unlockKey() {
     }
     KEY = k;
     localStorage.setItem("copcat_key", KEY);
+    setCookie("copcat_key", KEY, 30);          // carry key into new tabs
     enterApp();
   } catch (e) {
     $("lockerr").textContent = String(e.message || e);
@@ -517,6 +527,8 @@ function lockWorkspace() {
   SESSION = ""; KEY = "";
   localStorage.removeItem("copcat_session");
   localStorage.removeItem("copcat_key");
+  clearCookie("copcat_session");
+  clearCookie("copcat_key");
   showLock(AUTHMODE);
 }
 

@@ -129,18 +129,24 @@ def _send_access_code(to, code, note):
 
 
 def _auth(request: Request):
-    """Gate: None if allowed, else a 401 naming the auth mode. The master
-    key (COPCAT_ACCESS_TOKEN) is accepted in every mode."""
+    """Gate: None if allowed, else a 401 naming the auth mode.
+
+    Accepts the session/key via headers (fetch calls) OR cookies (plain
+    browser navigation — 'open dossier' / full report open in new tabs,
+    where custom headers cannot be attached)."""
     if _auth_mode() == "open":
         return None
     master = os.environ.get("COPCAT_ACCESS_TOKEN")
-    if master and request.headers.get("x-copcat-key") == master:
+    if master and (request.headers.get("x-copcat-key") == master
+                   or request.cookies.get("copcat_key") == master):
         return None
     if _auth_mode() == "key":
         return JSONResponse(
             {"error": "unauthorized: access key required", "mode": "key"},
             status_code=401)
-    if _session_ok(request.headers.get("x-copcat-session") or ""):
+    token = (request.headers.get("x-copcat-session")
+             or request.cookies.get("copcat_session") or "")
+    if _session_ok(token):
         return None
     return JSONResponse(
         {"error": "unauthorized: access code required", "mode": "code"},
@@ -198,7 +204,17 @@ async def auth_verify(request: Request, code: str = Form("")):
     if hmac.compare_digest(_code_hash(code), ch.get("code_hash", "")):
         ch["expires"] = 0                       # burn the code after use
         store.put_json("challenge", ch)
-        return {"session": _session_token(), "mode": "code"}
+        token = _session_token()
+        resp = JSONResponse({"session": token, "mode": "code"})
+        # cookie carries the session across plain navigation (new tabs,
+        # report links) where fetch headers cannot be attached
+        resp.set_cookie(
+            "copcat_session", token,
+            max_age=int(float(os.environ.get("COPCAT_SESSION_HOURS") or 24)
+                        * 3600),
+            path="/", samesite="lax",
+            secure=request.url.scheme == "https")
+        return resp
     ch["attempts"] = ch.get("attempts", 0) + 1
     if ch["attempts"] >= AUTH_MAX_ATTEMPTS:
         ch["expires"] = 0                       # too many wrong tries: burn

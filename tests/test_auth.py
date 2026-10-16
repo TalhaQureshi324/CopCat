@@ -68,9 +68,20 @@ def test_request_verify_session_flow(code_mode):
     session = r.json()["session"]
     assert _session_ok(session)
 
-    assert client.get("/api/jobs").status_code == 401
+    # header path (fetch)
     r = client.get("/api/jobs", headers={"x-copcat-session": session})
     assert r.status_code == 200
+    # cookie path (plain navigation: report/dossier links in new tabs) -
+    # verify set the cookie, so even a headerless request passes
+    assert client.get("/api/jobs").status_code == 200
+    fresh = TestClient(app)          # separate browser: no session cookie
+    assert fresh.get("/api/jobs").status_code == 401
+
+    # the session cookie lets PLAIN NAVIGATION through (report/dossier
+    # links open in new tabs where custom headers cannot be attached)
+    fresh = TestClient(app)          # no explicit headers at all
+    fresh.cookies.set("copcat_session", session)
+    assert fresh.get("/api/jobs").status_code == 200
 
     # the code is burned after use
     r = client.post("/api/auth/verify", data={"code": code})
