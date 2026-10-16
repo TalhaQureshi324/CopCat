@@ -51,8 +51,10 @@ html:not([data-theme="dark"]) .dark-only { display:none; }
   border:1.5px solid var(--line2); border-radius:10px; outline:none;
   font-variant-numeric:tabular-nums; }
 .codeRow input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--tint); }
-.keyRow input { width:100%; height:46px; padding:0 14px; font-size:15px;
-  text-align:left; font-family:inherit; }
+#keyEntry input { width:100%; height:48px; padding:0 14px; font-size:15px;
+  text-align:left; font-family:inherit; border:1.5px solid var(--line2);
+  border-radius:11px; background:var(--surface); color:var(--ink); outline:none; }
+#keyEntry input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--tint); }
 .btn { background:var(--accent); color:var(--accent-ink); border:none;
   border-radius:11px; padding:13px 20px; font-size:15px; font-weight:600;
   cursor:pointer; width:100%; transition:filter .15s, transform .05s; }
@@ -241,14 +243,13 @@ a:hover { text-decoration:underline; }
     </div>
 
     <div id="keyEntry" class="hidden">
-      <div class="codeRow keyRow">
-        <input type="text" id="key_input" placeholder="Owner access key" autocomplete="off">
-      </div>
+      <input type="password" id="key_input" placeholder="Owner access key"
+             autocomplete="off" style="width:100%; margin-bottom:12px">
       <button class="btn" id="keybtn" onclick="unlockKey()">Unlock workspace&ensp;&rarr;</button>
     </div>
 
     <div id="lockerr" class="err"></div>
-    <div class="req" id="reqlink">Need access? <a onclick="showRequest()">Request a code from your workspace owner</a></div>
+    <div class="req" id="reqlink">Need access? <a href="#" onclick="showRequest(); return false;">Request a code from your workspace owner</a></div>
     <div class="lockfoot">Private deployment &middot; Secure access</div>
   </div>
 </div>
@@ -705,7 +706,7 @@ function renderJob(d) {
   $("jv_subs").textContent = st.submissions ?? "—";
   $("jv_pairs").textContent = st.pairs ?? "—";
   $("jv_flagged").textContent = (S.pairs || []).length;
-  $("jv_graded").textContent = st.graded ?? (S.gradebook || []).length || "—";
+  $("jv_graded").textContent = st.graded || (S.gradebook || []).length || "—";
   $("progcard").classList.add("hidden");
   $("dlcsv").href = `/api/jobs/${jobId}/gradebook.csv`;
   $("dlcsv").classList.toggle("hidden", !(S.gradebook || []).length);

@@ -1,0 +1,7 @@
+{
+  "name": "copcat-ui-tests",
+  "private": true,
+  "dependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

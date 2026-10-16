@@ -26,3 +26,6 @@ Thumbs.db
 # Vercel CLI local artifacts
 .vercel/
 uv.lock
+
+# jsdom (frontend smoke test)
+tests/ui/node_modules/
