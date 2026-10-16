@@ -125,6 +125,19 @@ def test_history_gradebook_delete_roundtrip(tmp_path, monkeypatch):
     assert fresh.get_meta(job_id) is None
 
 
+def test_aggregate_stats_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setenv("COPCAT_RESULTS_DIR", str(tmp_path))
+    before = client.get("/api/stats").json()
+    r = client.post("/api/jobs", files={
+        "submissions": ("subs.zip", _zip_bytes(), "application/zip")})
+    job_id = r.json()["job_id"]
+    client.post(f"/api/jobs/{job_id}/run", data={"mode": "audit"})
+    after = client.get("/api/stats").json()
+    assert after["jobs"] == before["jobs"] + 1
+    assert after["submissions"] >= before["submissions"] + 4
+    assert after["needs_review"] >= before["needs_review"] + 1
+
+
 def test_store_backend_selection(monkeypatch):
     monkeypatch.delenv("BLOB_READ_WRITE_TOKEN", raising=False)
     assert isinstance(get_store(), DiskStore)

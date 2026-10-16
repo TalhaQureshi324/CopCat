@@ -232,7 +232,9 @@ def _meta_view(meta):
     return {"job_id": meta.get("job_id"), "status": meta.get("status"),
             "mode": meta.get("mode"), "created": meta.get("created"),
             "error": meta.get("error"), "summary": meta.get("summary"),
-            "runtime_s": meta.get("runtime_s")}
+            "runtime_s": meta.get("runtime_s"),
+            "progress": meta.get("progress"),
+            "stats": meta.get("stats")}
 
 
 # --------------------------------------------------------------------------
@@ -243,6 +245,23 @@ def _execute(store, meta, mode, preserve):
     started = time.time()
     ws = store.workspace(job_id)
     summary = {}
+    stats = {"submissions": 0, "pairs": 0, "flagged": 0, "graded": 0}
+    last_flush = [0.0]
+
+    def progress(phase, done, total):
+        meta["progress"] = {"phase": phase, "done": done, "total": total}
+        if phase == "load":
+            stats["submissions"] = total
+        elif phase == "pairs":
+            stats["pairs"] = total
+        now = time.time()
+        if now - last_flush[0] >= 2.0 or done >= total:
+            last_flush[0] = now
+            try:
+                store.save_meta(meta)
+            except Exception:
+                pass                # progress persistence is best-effort
+
     try:
         paths = store.materialize(job_id, ws, meta.get("uploads"))
         preserved = tuple(x.strip() for x in (preserve or "").split(",")
@@ -253,29 +272,36 @@ def _execute(store, meta, mode, preserve):
         out_dir = os.path.join(ws, "output")
         if mode in ("audit", "both"):
             from .audit import run_audit
-            pairs = run_audit(paths["submissions"], cfg, out_dir, workers=1)
+            pairs = run_audit(paths["submissions"], cfg, out_dir, workers=1,
+                              progress=progress)
             summary["pairs"] = [
                 {"a": p.roll_a, "b": p.roll_b,
                  "blended": round(100 * p.blended, 1), "flag": p.flag,
                  "evasion": round(100 * p.evasion, 1) if p.evasion else None}
                 for p in pairs if p.flag != "CLEAN"]
+            stats["flagged"] = len(summary["pairs"])
+            stats["pairs"] = len(pairs) or stats["pairs"]
         if mode in ("grade", "both"):
             if not paths.get("rubric"):
                 summary["gradebook"] = []
             else:
                 from .rubric import run_grade
                 rows = run_grade(paths["submissions"], paths["rubric"],
-                                 os.path.join(out_dir, "grade_report.csv"))
+                                 os.path.join(out_dir, "grade_report.csv"),
+                                 progress=progress)
                 summary["gradebook"] = [
                     {"roll": r["roll"], "filename": r["filename"],
                      "final": round(r["final"], 2), "report": r["report"],
                      "task_scores": {k: round(v, 2)
                                      for k, v in r["task_scores"].items()}}
                     for r in rows]
+            stats["graded"] = len(summary["gradebook"]) or stats["graded"]
         runtime = round(time.time() - started, 1)
         meta["result_urls"] = store.persist_results(job_id, out_dir)
         meta["status"], meta["summary"] = "done", summary
         meta["runtime_s"] = runtime
+        meta["stats"] = stats
+        meta["progress"] = None
         meta["error"] = None
         store.save_meta(meta)
         return {"job_id": job_id, "status": "done", "summary": summary,
@@ -357,6 +383,29 @@ async def run_job(job_id: str, request: Request,
     result = await run_in_threadpool(_execute, store, meta, mode, preserve)
     status = 200 if result["status"] == "done" else 500
     return JSONResponse(result, status_code=status)
+
+
+@app.get("/api/stats")
+async def stats(request: Request):
+    """Aggregate workspace counters for the overview cards."""
+    denied = _auth(request)
+    if denied:
+        return denied
+    store, err = _store_or_error()
+    if err:
+        return err
+    try:
+        jobs = store.list_jobs()
+    except Exception:
+        jobs = []
+    agg = {"jobs": len(jobs), "submissions": 0, "needs_review": 0,
+           "graded": 0}
+    for m in jobs:
+        st = m.get("stats") or {}
+        agg["submissions"] += st.get("submissions") or 0
+        agg["needs_review"] += st.get("flagged") or 0
+        agg["graded"] += st.get("graded") or 0
+    return agg
 
 
 @app.get("/api/jobs")

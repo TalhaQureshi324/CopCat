@@ -41,11 +41,14 @@ def _load_submissions(directory, cfg):
     return subs, blobs
 
 
-def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all"):
+def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all",
+              progress=None):
     started = time.time()
     os.makedirs(out_dir, exist_ok=True)
 
     subs, metadata_blobs = _load_submissions(directory, cfg)
+    if progress:
+        progress("load", len(subs), len(subs))
     if not subs:
         print("No submissions found in {} (expected .py/.ipynb files or an "
               "LMS .zip)".format(directory))
@@ -84,7 +87,7 @@ def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all"):
             s.effective_lines = stripped
             s.code_text = "\n".join(stripped)
 
-    pairs = compare_all(subs, cfg, workers=workers)
+    pairs = compare_all(subs, cfg, workers=workers, progress=progress)
     pairs = apply_evasion_rule(pairs, subs, cfg)
 
     # forensics: shared notebook/drive IDs are definitive regardless of metrics
@@ -95,6 +98,8 @@ def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all"):
         pairs.sort(key=lambda r: r.blended, reverse=True)
     clusters = clusters_from_pairs(pairs, cfg.suspicious)
 
+    if progress:
+        progress("report", 0, 1)
     csv_path = os.path.join(out_dir, "copcat_audit.csv")
     txt_path = os.path.join(out_dir, "copcat_audit.txt")
     html_path = os.path.join(out_dir, "index.html")

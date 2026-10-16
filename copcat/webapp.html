@@ -3,129 +3,577 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CopCat - lab integrity &amp; grading dashboard</title>
+<title>CopCat — Integrity Workspace</title>
 <style>
-:root { --bg:#f5f6fa; --ink:#1e272e; --line:#dcdde1; --accent:#2980b9;
-        --bad:#c0392b; --warn:#e67e22; --good:#27ae60; }
-* { box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; margin:0; background:var(--bg); color:var(--ink); }
-header { background:#1e272e; color:#fff; padding:16px 28px; }
-header h1 { margin:0; font-size:20px; }
-header .sub { color:#9aa4ad; font-size:12px; margin-top:3px; }
-main { max-width:1240px; margin:0 auto; padding:22px; }
-.card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 20px; margin-bottom:18px; }
-h2 { font-size:15px; margin:0 0 12px; color:#2c3e50; text-transform:uppercase; letter-spacing:.4px; }
-.drop { border:2px dashed var(--accent); border-radius:8px; padding:26px; text-align:center; color:#57606f; cursor:pointer; }
-.drop.over { background:#eaf4fd; }
-.row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
-button { background:var(--accent); border:none; color:#fff; padding:9px 18px; border-radius:5px; font-size:14px; cursor:pointer; }
-button:disabled { background:#b2bec3; cursor:wait; }
-button.secondary { background:#636e72; }
-button.danger { background:var(--bad); padding:4px 10px; font-size:12px; }
-select, input[type=text] { padding:8px; border:1px solid var(--line); border-radius:5px; font-size:14px; }
-#status { margin-top:10px; font-size:14px; }
-.bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:6px; }
-.bar>div { height:100%; width:0; background:var(--accent); transition:width .4s; }
-table { border-collapse:collapse; width:100%; font-size:13px; background:#fff; }
-th,td { border:1px solid var(--line); padding:6px 10px; text-align:left; }
-th { background:#ecf0f1; cursor:pointer; user-select:none; }
-tr:hover td { background:#f7f9ff; }
-.flag-HIGH_PROBABILITY_PLAGIARISM { color:#fff; background:var(--bad); padding:2px 8px; border-radius:3px; font-weight:600; }
-.flag-SUSPICIOUS { color:#fff; background:var(--warn); padding:2px 8px; border-radius:3px; font-weight:600; }
-.hidden { display:none; }
-.note { color:#636e72; font-size:12px; }
-a { color:var(--accent); }
-.cluster { display:inline-block; background:#ecf0f1; border:1px solid var(--line); border-radius:14px; padding:4px 12px; margin:3px; font-size:13px; }
-.err { color:var(--bad); font-size:13px; white-space:pre-wrap; }
-.jrow { display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--line); padding:7px 2px; font-size:13px; }
-.jrow:last-child { border-bottom:none; }
-.jrow .id { font-family:Consolas,monospace; color:#636e72; }
-.jrow .meta { color:#636e72; }
-.pill { padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; color:#fff; }
+:root {
+  --bg:#F5F0E7; --surface:#FFFFFF; --accent:#218C85; --accent-ink:#FFFFFF;
+  --ink:#202B2D; --muted:#6F7B7C; --line:#E5DECE; --line2:#D8CFBB;
+  --tint:rgba(33,140,133,.10); --good:#218C85; --warn:#B97A1A; --bad:#B3372B;
+  --shadow:0 1px 2px rgba(32,43,45,.05), 0 6px 24px rgba(32,43,45,.06);
+  --radius:14px;
+}
+html[data-theme="dark"] {
+  --bg:#171A1B; --surface:#24292A; --accent:#39B8A8; --accent-ink:#0E2622;
+  --ink:#F1F0EA; --muted:#96A1A2; --line:#333B3C; --line2:#414B4C;
+  --tint:rgba(57,184,168,.12); --good:#39B8A8; --warn:#E0A33C; --bad:#E06C5B;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.35);
+}
+* { box-sizing:border-box; }
+html, body { height:100%; }
+body { margin:0; font-family:'Inter','Segoe UI',system-ui,Arial,sans-serif;
+  background:var(--bg); color:var(--ink); font-size:14.5px;
+  transition:background .25s, color .25s; }
+button { font-family:inherit; }
+.hidden { display:none !important; }
+
+/* ---------- lock screen ---------- */
+#lock { position:fixed; inset:0; background:var(--bg); z-index:50;
+  display:flex; align-items:center; justify-content:center; }
+.lockbox { text-align:center; max-width:430px; width:100%; padding:24px; }
+.lockbox .logo { width:56px; height:56px; margin:0 auto 6px; display:block; }
+.lockbox h1 { font-size:26px; margin:10px 0 4px; letter-spacing:-.3px; }
+.lockbox .sub { color:var(--muted); margin-bottom:26px; }
+.codeRow { display:flex; gap:9px; justify-content:center; align-items:center;
+  background:var(--surface); border:1px solid var(--line2); border-radius:14px;
+  padding:14px 16px; box-shadow:var(--shadow); margin-bottom:16px; }
+.codeRow .lockicon { color:var(--muted); margin-right:4px; display:flex; }
+.codeRow input { width:44px; height:54px; text-align:center; font-size:22px;
+  font-weight:600; color:var(--ink); background:var(--bg);
+  border:1.5px solid var(--line2); border-radius:10px; outline:none;
+  font-variant-numeric:tabular-nums; }
+.codeRow input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--tint); }
+.keyRow input { width:100%; height:46px; padding:0 14px; font-size:15px;
+  text-align:left; font-family:inherit; }
+.btn { background:var(--accent); color:var(--accent-ink); border:none;
+  border-radius:11px; padding:13px 20px; font-size:15px; font-weight:600;
+  cursor:pointer; width:100%; transition:filter .15s, transform .05s; }
+.btn:hover { filter:brightness(1.06); }
+.btn:active { transform:translateY(1px); }
+.btn:disabled { opacity:.55; cursor:wait; }
+.btn.secondary { background:var(--surface); color:var(--ink);
+  border:1px solid var(--line2); font-weight:500; }
+.btn.slim { width:auto; padding:9px 16px; font-size:13.5px; }
+.lockbox .req { margin-top:18px; color:var(--muted); font-size:13px; }
+.lockbox .req a { color:var(--accent); font-weight:600; cursor:pointer;
+  text-decoration:none; }
+.lockfoot { margin-top:34px; color:var(--muted); font-size:12px;
+  letter-spacing:.3px; }
+.lockpanel { background:var(--surface); border:1px solid var(--line2);
+  border-radius:14px; padding:16px; box-shadow:var(--shadow);
+  margin-bottom:16px; text-align:left; }
+.lockpanel label { display:block; font-size:12.5px; color:var(--muted);
+  margin:0 0 6px; }
+.lockpanel input { width:100%; height:42px; padding:0 12px; font-size:14px;
+  border:1.5px solid var(--line2); border-radius:9px; background:var(--bg);
+  color:var(--ink); outline:none; margin-bottom:10px; }
+.lockpanel input:focus { border-color:var(--accent); }
+.err { color:var(--bad); font-size:13px; margin-top:10px; white-space:pre-wrap; }
+.ok { color:var(--good); font-size:13px; margin-top:10px; }
+
+/* ---------- app shell ---------- */
+#app { display:grid; grid-template-columns:236px 1fr; min-height:100vh; }
+aside { background:var(--surface); border-right:1px solid var(--line);
+  padding:20px 14px; display:flex; flex-direction:column; gap:8px;
+  position:sticky; top:0; height:100vh; }
+.brand { display:flex; align-items:center; gap:10px; padding:4px 8px 16px; }
+.brand .logo { width:30px; height:30px; }
+.brand b { font-size:16.5px; letter-spacing:-.2px; }
+.navitem { display:flex; align-items:center; gap:10px; padding:9px 12px;
+  border-radius:9px; color:var(--muted); cursor:pointer; font-weight:500;
+  border:none; background:none; font-size:14px; text-align:left; }
+.navitem.active { background:var(--tint); color:var(--accent); }
+.navitem:hover { color:var(--ink); }
+.side { flex:1; }
+.sidefoot { display:flex; align-items:center; gap:8px; padding-top:12px;
+  border-top:1px solid var(--line); }
+.iconbtn { width:34px; height:34px; border-radius:9px; border:1px solid var(--line2);
+  background:var(--surface); color:var(--muted); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; }
+.iconbtn:hover { color:var(--accent); border-color:var(--accent); }
+.sidefoot .who { font-size:11.5px; color:var(--muted); flex:1; line-height:1.3; }
+
+main { padding:26px 34px 60px; max-width:1120px; width:100%; }
+header.top { display:flex; align-items:flex-start; justify-content:space-between;
+  margin-bottom:20px; }
+header.top h1 { font-size:22px; margin:0; letter-spacing:-.4px; }
+header.top .sub2 { color:var(--muted); font-size:13.5px; margin-top:4px; }
+.avatar { width:38px; height:38px; border-radius:50%; background:var(--tint);
+  color:var(--accent); border:1px solid var(--line2); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; }
+
+/* cards & stats */
+.card { background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow);
+  margin-bottom:16px; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:14px; margin-bottom:16px; }
+.stat { background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--radius); padding:15px 17px; box-shadow:var(--shadow);
+  display:flex; gap:13px; align-items:center; }
+.stat .ic { width:38px; height:38px; border-radius:11px; background:var(--tint);
+  color:var(--accent); display:flex; align-items:center; justify-content:center;
+  flex:none; }
+.stat .ic.warn { color:var(--warn); background:rgba(185,122,26,.12); }
+.stat .lbl { font-size:12.5px; color:var(--muted); }
+.stat .num { font-size:22px; font-weight:700; letter-spacing:-.4px; line-height:1.15; }
+
+/* upload zone */
+.drop { border:2px dashed var(--accent); border-radius:var(--radius);
+  padding:30px 20px; text-align:center; cursor:pointer; background:transparent;
+  transition:background .15s; }
+.drop.over { background:var(--tint); }
+.drop h3 { margin:10px 0 4px; font-size:15.5px; }
+.drop p { margin:0 0 14px; color:var(--muted); font-size:13px; }
+.filemeta { font-size:13px; color:var(--good); font-weight:600; margin-top:10px; }
+.row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.filed { border:1px solid var(--line2); border-radius:9px; padding:6px 10px;
+  font-size:12.5px; color:var(--muted); background:var(--bg); }
+.filed b { color:var(--ink); font-weight:600; }
+input[type=text] { padding:9px 12px; border:1.5px solid var(--line2);
+  border-radius:9px; font-size:13.5px; background:var(--surface);
+  color:var(--ink); outline:none; }
+input[type=text]:focus { border-color:var(--accent); }
+.seg { display:inline-flex; background:var(--bg); border:1px solid var(--line2);
+  border-radius:10px; padding:3px; }
+.seg button { border:none; background:none; color:var(--muted); padding:8px 16px;
+  border-radius:8px; font-size:13.5px; font-weight:600; cursor:pointer; }
+.seg button.on { background:var(--accent); color:var(--accent-ink); }
+
+/* progress */
+.prog .ph { display:flex; justify-content:space-between; align-items:baseline; }
+.prog .phase { color:var(--muted); font-size:13.5px; font-weight:600;
+  text-transform:uppercase; letter-spacing:.5px; }
+.prog .count { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; }
+.prog .count span { color:var(--muted); font-size:16px; font-weight:500; }
+.bar { height:9px; background:var(--bg); border:1px solid var(--line);
+  border-radius:99px; overflow:hidden; margin:12px 0 8px; }
+.bar>div { height:100%; width:0; background:var(--accent); border-radius:99px;
+  transition:width .5s; }
+.prog .meta { color:var(--muted); font-size:12.5px; display:flex;
+  justify-content:space-between; }
+
+/* job cards */
+.jobs { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr));
+  gap:14px; }
+.job { background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--radius); padding:15px 17px; box-shadow:var(--shadow);
+  cursor:pointer; position:relative; transition:border-color .15s; }
+.job:hover { border-color:var(--accent); }
+.job .pill { display:inline-block; padding:3px 10px; border-radius:99px;
+  font-size:11px; font-weight:700; letter-spacing:.4px; color:#fff; }
 .pill-done { background:var(--good); } .pill-running { background:var(--accent); }
-.pill-error { background:var(--bad); } .pill-uploaded { background:#636e72; }
-.jrow .open { margin-left:auto; }
+.pill-error { background:var(--bad); } .pill-uploaded { background:var(--muted); }
+.job .id { font-family:ui-monospace,Consolas,monospace; color:var(--muted);
+  font-size:11.5px; }
+.job .when { color:var(--muted); font-size:12px; margin:7px 0 3px; }
+.job .nums { font-size:13px; font-weight:600; }
+.job .del { position:absolute; top:10px; right:10px; width:26px; height:26px;
+  border-radius:7px; border:none; background:none; color:var(--muted);
+  cursor:pointer; font-size:15px; }
+.job .del:hover { color:var(--bad); background:var(--tint); }
+h2.sec { font-size:14px; margin:22px 0 12px; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.7px; }
+
+/* tables */
+table { border-collapse:collapse; width:100%; font-size:13px; }
+th,td { border-bottom:1px solid var(--line); padding:9px 11px; text-align:left; }
+th { color:var(--muted); font-size:11.5px; text-transform:uppercase;
+  letter-spacing:.5px; cursor:pointer; user-select:none; }
+tr:hover td { background:var(--tint); }
+.flag-HIGH_PROBABILITY_PLAGIARISM { color:#fff; background:var(--bad);
+  padding:3px 10px; border-radius:99px; font-weight:700; font-size:11px; }
+.flag-SUSPICIOUS { color:#fff; background:var(--warn); padding:3px 10px;
+  border-radius:99px; font-weight:700; font-size:11px; }
+.cluster { display:inline-block; background:var(--tint); color:var(--accent);
+  border:1px solid var(--line2); border-radius:14px; padding:4px 13px;
+  margin:3px; font-size:12.5px; font-weight:600; }
+a { color:var(--accent); font-weight:600; text-decoration:none; }
+a:hover { text-decoration:underline; }
+.note { color:var(--muted); font-size:12.5px; }
+#lock,#app { display:none; }
+#lock.on { display:flex; } #app.on { display:grid; }
+@media (max-width:860px){ #app { grid-template-columns:1fr; } aside { display:none; } main{padding:18px;} }
 </style>
 </head>
 <body>
-<header><h1>CopCat</h1>
-<div class="sub">deterministic lab plagiarism audit &amp; rubric grading &mdash; no AI tokens</div></header>
-<main>
 
-<div class="card hidden" id="gate">
-  <h2>Private deployment</h2>
-  <p class="note">This CopCat instance is restricted. Request an access code below &mdash; the request is emailed to the owner, who hands the code to approved users. The code works for <b>5 minutes</b> after it is issued.</p>
-  <div class="row" style="margin-top:10px">
-    <input type="text" id="gate_note" placeholder="Your name / purpose (helps the owner decide)" style="flex:1;min-width:220px">
-    <button class="secondary" id="gate_req" onclick="requestCode()">Request access code</button>
+<!-- ============ LOCK SCREEN ============ -->
+<div id="lock" class="on">
+  <div class="lockbox">
+    <svg class="logo" viewBox="0 0 44 44" fill="none">
+      <path d="M10 15 L12.5 5 L19.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M34 15 L31.5 5 L24.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+      <rect x="8" y="10" width="28" height="28" rx="8" fill="var(--accent)"/>
+      <rect x="14" y="16" width="16" height="16" rx="3" fill="var(--surface)"/>
+      <path d="M17.5 20.5h9M17.5 24h9M17.5 27.5h5.5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <h1>Welcome back.</h1>
+    <div class="sub" id="locksub">Enter your access code to continue to your workspace.</div>
+
+    <div class="lockpanel hidden" id="reqpanel">
+      <label>Your name / purpose (helps the owner decide)</label>
+      <input type="text" id="req_note" placeholder="e.g. Hamza — TA for section B">
+      <button class="btn" id="reqbtn" onclick="requestCode()">Email me a code… well, email the owner</button>
+      <div id="reqmsg" class="ok hidden">Request sent — the owner has your code. Ask them for it.</div>
+      <div id="reqerr" class="err hidden"></div>
+    </div>
+
+    <div id="codeEntry">
+      <div class="codeRow">
+        <span class="lockicon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+        <input maxlength="1" inputmode="numeric" autocomplete="one-time-code">
+        <input maxlength="1" inputmode="numeric">
+        <input maxlength="1" inputmode="numeric">
+        <input maxlength="1" inputmode="numeric">
+        <input maxlength="1" inputmode="numeric">
+        <input maxlength="1" inputmode="numeric">
+      </div>
+      <button class="btn" id="unlockbtn" onclick="unlockCode()">Unlock workspace&ensp;&rarr;</button>
+    </div>
+
+    <div id="keyEntry" class="hidden">
+      <div class="codeRow keyRow">
+        <input type="text" id="key_input" placeholder="Access key" autocomplete="off">
+      </div>
+      <button class="btn" onclick="unlockKey()">Unlock workspace&ensp;&rarr;</button>
+    </div>
+
+    <div id="lockerr" class="err"></div>
+    <div class="req" id="reqlink">Need access? <a onclick="showRequest()">Request a code from your workspace owner</a></div>
+    <div class="lockfoot">Private deployment &middot; Secure access</div>
   </div>
-  <div class="row hidden" id="gate_enter_row" style="margin-top:10px">
-    <input type="text" id="gate_code" placeholder="6-digit code" maxlength="6" style="width:170px">
-    <button onclick="verifyCode()">Enter site</button>
-    <span id="gate_msg" class="note"></span>
-  </div>
-  <div id="gate_err" class="err"></div>
-  <p class="note" style="margin-top:8px">Owner or long-term user? <a href="#" onclick="enterKey(); return false;">Enter access key instead</a></p>
 </div>
 
-<div class="card">
-<h2>1. Upload</h2>
-<div class="drop" id="drop">Drop the <b>submissions ZIP</b> here (Canvas / Classroom / Moodle export, or loose .py files) &mdash; or click to browse
-<input type="file" id="file" hidden></div>
-<div id="uploadinfo" style="margin-top:8px;font-size:13px;color:#27ae60;font-weight:600"></div>
-<div class="row" style="margin-top:12px">
-<label>Rubric (optional): <input type="file" id="rubric" accept=".yaml,.yml"></label>
-<span id="rubricinfo" style="font-size:13px;color:#27ae60;font-weight:600"></span>
-</div>
-<div class="row" style="margin-top:8px">
-<label>Starter code (optional): <input type="file" id="starterfile" accept=".py"></label>
-<span id="starterinfo" style="font-size:13px;color:#27ae60;font-weight:600"></span>
-</div>
-<p class="note">When hosted on Vercel, uploads are limited to ~4 MB per file (platform request limit).</p>
+<!-- ============ WORKSPACE ============ -->
+<div id="app">
+  <aside>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 44 44" fill="none">
+        <path d="M10 15 L12.5 5 L19.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M34 15 L31.5 5 L24.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <rect x="8" y="10" width="28" height="28" rx="8" fill="var(--accent)"/>
+        <rect x="14" y="16" width="16" height="16" rx="3" fill="var(--surface)"/>
+        <path d="M17.5 20.5h9M17.5 24h9M17.5 27.5h5.5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <b>CopCat</b>
+    </div>
+    <button class="navitem active" id="nav_overview" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      Overview</button>
+    <button class="navitem" onclick="newJob()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      New job</button>
+    <div class="side"></div>
+    <div class="sidefoot">
+      <button class="iconbtn" id="themeBtn" onclick="toggleTheme()" title="Toggle theme">
+        <svg id="iconSun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg id="iconMoon" class="hidden" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+      </button>
+      <button class="iconbtn" onclick="lockWorkspace()" title="Lock workspace">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      </button>
+      <div class="who">CopCat<br>deterministic · no AI tokens</div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div>
+        <h1>Integrity Workspace</h1>
+        <div class="sub2">Review submissions, audit similarity and grade against a rubric — labs, assignments, anything.</div>
+      </div>
+      <button class="avatar" onclick="lockWorkspace()" title="Lock workspace">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>
+      </button>
+    </header>
+
+    <!-- ======== HOME ======== -->
+    <section id="home">
+      <div class="stats" id="homeStats">
+        <div class="stat"><div class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></div>
+          <div><div class="lbl">Submissions audited</div><div class="num" id="st_subs">0</div></div></div>
+        <div class="stat"><div class="ic warn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+          <div><div class="lbl">Needs review</div><div class="num" id="st_review">0</div></div></div>
+        <div class="stat"><div class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div><div class="lbl">Graded</div><div class="num" id="st_graded">0</div></div></div>
+      </div>
+
+      <div class="card">
+        <div class="drop" id="drop">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8"><path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M12 12v9"/><path d="m8 16 4-4 4 4"/></svg>
+          <h3>Upload submissions</h3>
+          <p>Drop a ZIP export (Canvas / Classroom / Moodle) or loose .py files — or browse</p>
+          <button class="btn slim" onclick="event.stopPropagation(); document.getElementById('file').click()">Browse files</button>
+          <input type="file" id="file" hidden>
+          <div class="filemeta" id="uploadinfo"></div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <span class="filed" id="rubricinfo">Rubric: <b>none</b></span>
+          <span class="filed" id="starterinfo">Starter code: <b>none</b></span>
+          <input type="text" id="preserve" placeholder="Preserved names: Book, Library, calculate_pay…"
+                 style="flex:1; min-width:230px">
+        </div>
+        <div class="row" style="margin-top:14px">
+          <div class="seg" id="modeseg">
+            <button data-mode="audit">Audit</button>
+            <button data-mode="grade">Grading</button>
+            <button data-mode="both" class="on">Audit + Grading</button>
+          </div>
+          <button class="btn slim" id="runbtn" onclick="run()">Run&ensp;&rarr;</button>
+          <label class="note">Rubric: <input type="file" id="rubric" accept=".yaml,.yml" hidden><a href="#" onclick="document.getElementById('rubric').click(); return false;">choose</a></label>
+          <label class="note">Starter: <input type="file" id="starterfile" accept=".py" hidden><a href="#" onclick="document.getElementById('starterfile').click(); return false;">choose</a></label>
+        </div>
+      </div>
+
+      <div class="card prog hidden" id="progcard">
+        <div class="ph">
+          <div class="phase" id="prog_phase">Working</div>
+          <div class="count"><b id="prog_done">0</b><span> / <span id="prog_total">0</span></span></div>
+        </div>
+        <div class="bar"><div id="prog_bar"></div></div>
+        <div class="meta"><span id="prog_pending"></span><span id="prog_elapsed"></span></div>
+        <div id="err" class="err"></div>
+      </div>
+
+      <h2 class="sec">Recent jobs</h2>
+      <div class="jobs" id="joblist"></div>
+    </section>
+
+    <!-- ======== JOB VIEW ======== -->
+    <section id="jobview" class="hidden">
+      <div class="row" style="margin-bottom:14px">
+        <button class="btn secondary slim" onclick="goHome()">&larr; Overview</button>
+        <span class="job .id" id="jv_title" style="font-weight:700"></span>
+        <span id="jv_pill"></span>
+      </div>
+      <div class="stats" id="jv_stats">
+        <div class="stat"><div class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></div>
+          <div><div class="lbl">Submissions</div><div class="num" id="jv_subs">0</div></div></div>
+        <div class="stat"><div class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg></div>
+          <div><div class="lbl">Pairs compared</div><div class="num" id="jv_pairs">0</div></div></div>
+        <div class="stat"><div class="ic warn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+          <div><div class="lbl">Needs review</div><div class="num" id="jv_flagged">0</div></div></div>
+        <div class="stat"><div class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <div><div class="lbl">Graded</div><div class="num" id="jv_graded">0</div></div></div>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-bottom:12px">
+          <a id="dlcsv" class="hidden"><button class="btn secondary slim">Export gradebook CSV</button></a>
+          <a id="linkindex" target="_blank"><button class="btn secondary slim">Full HTML report</button></a>
+          <a id="linkaudit" target="_blank"><button class="btn secondary slim">Audit (txt)</button></a>
+        </div>
+        <div id="clusters"></div>
+        <h2 class="sec">Flagged pairs</h2>
+        <table id="pairs"><thead><tr>
+          <th onclick="sortTable(0)">A</th><th onclick="sortTable(1)">B</th>
+          <th onclick="sortTable(2)">%</th><th>Flag</th><th>Evidence</th>
+        </tr></thead><tbody></tbody></table>
+        <h2 class="sec">Gradebook</h2>
+        <div id="gradebook"></div>
+      </div>
+    </section>
+  </main>
 </div>
 
-<div class="card">
-<h2>2. Run</h2>
-<div class="row">
-<label>Preserved names <input type="text" id="preserve" placeholder="Book,Library,calculate_pay,..."></label>
-<button class="secondary" id="b-audit" onclick="run('audit')">Run audit</button>
-<button class="secondary" id="b-grade" onclick="run('grade')">Run grading</button>
-<button id="b-both" onclick="run('both')">Run both</button>
-</div>
-<div id="status"></div>
-<div class="bar"><div id="bar"></div></div>
-<div id="err" class="err"></div>
-</div>
-
-<div class="card hidden" id="results">
-<h2>3. Results</h2>
-<div class="row" style="margin-bottom:10px">
-<a id="dlcsv" class="hidden"><button>Export gradebook CSV</button></a>
-<a id="linkindex" target="_blank"><button class="secondary">Full HTML report</button></a>
-<a id="linkaudit" target="_blank"><button class="secondary">Audit (txt)</button></a>
-</div>
-<div id="clusters"></div>
-<h2 style="margin-top:18px">Flagged pairs</h2>
-<table id="pairs"><thead><tr>
-<th onclick="sortTable(0)">A</th><th onclick="sortTable(1)">B</th>
-<th onclick="sortTable(2)">%</th><th>flag</th><th>dossier</th>
-</tr></thead><tbody></tbody></table>
-<h2 style="margin-top:18px">Gradebook</h2>
-<div id="gradebook"></div>
-</div>
-
-<div class="card hidden" id="history">
-<h2>Job history</h2>
-<p class="note">Previous uploads and results are kept &mdash; open any job to see its results again (they survive page refreshes).</p>
-<div id="joblist"></div>
-</div>
-
-</main>
 <script>
-let jobId = null, runTimer = null, retried401 = false;
+let jobId = null, runMode = "both", runTimer = null, pollTimer = null, t0 = 0;
 let KEY = localStorage.getItem("copcat_key") || "";
 let SESSION = localStorage.getItem("copcat_session") || "";
+let AUTHMODE = "open";
 const $ = id => document.getElementById(id);
+
+/* ---------- theme ---------- */
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  $("iconSun").classList.toggle("hidden", t === "dark");
+  $("iconMoon").classList.toggle("hidden", t !== "dark");
+  localStorage.setItem("copcat_theme", t);
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.getAttribute("data-theme") === "dark"
+    ? "light" : "dark");
+}
+applyTheme(localStorage.getItem("copcat_theme") ||
+  (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+
+/* ---------- fetch wrapper ---------- */
+async function api(url, opts = {}) {
+  opts.headers = Object.assign({}, opts.headers,
+    KEY ? { "x-copcat-key": KEY } : {},
+    SESSION ? { "x-copcat-session": SESSION } : {});
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    const body = await r.clone().json().catch(() => ({}));
+    SESSION = ""; localStorage.removeItem("copcat_session");
+    showLock(body.mode || AUTHMODE);
+  }
+  return r;
+}
+
+/* ---------- lock screen ---------- */
+function showLock(mode) {
+  AUTHMODE = mode || AUTHMODE;
+  $("app").classList.remove("on");
+  $("lock").classList.add("on");
+  $("reqlink").classList.toggle("hidden", AUTHMODE !== "code");
+  $("codeEntry").classList.toggle("hidden", AUTHMODE !== "code");
+  $("keyEntry").classList.toggle("hidden", AUTHMODE !== "key");
+  $("locksub").textContent = AUTHMODE === "key"
+    ? "Enter your access key to continue to your workspace."
+    : "Enter your access code to continue to your workspace.";
+  if (AUTHMODE === "key") $("key_input").focus();
+  else { const f = document.querySelectorAll("#codeEntry input"); f[0] && f[0].focus(); }
+}
+function showRequest() {
+  $("reqpanel").classList.remove("hidden");
+  $("req_note").focus();
+}
+async function requestCode() {
+  $("reqerr").classList.add("hidden"); $("reqmsg").classList.add("hidden");
+  $("reqbtn").disabled = true;
+  try {
+    const fd = new FormData(); fd.append("note", $("req_note").value);
+    const r = await fetch("/api/auth/request", { method: "POST", body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "request failed");
+    $("reqmsg").classList.remove("hidden");
+  } catch (e) {
+    $("reqerr").textContent = String(e.message || e);
+    $("reqerr").classList.remove("hidden");
+  } finally { $("reqbtn").disabled = false; }
+}
+/* six code boxes: auto-advance, backspace, paste */
+document.querySelectorAll("#codeEntry input").forEach((inp, i, all) => {
+  inp.addEventListener("input", () => {
+    inp.value = inp.value.replace(/\D/g, "").slice(-1);
+    if (inp.value && i < all.length - 1) all[i + 1].focus();
+  });
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Backspace" && !inp.value && i > 0) all[i - 1].focus();
+  });
+  inp.addEventListener("paste", e => {
+    const digits = (e.clipboardData.getData("text") || "").replace(/\D/g, "");
+    if (digits.length) { e.preventDefault();
+      digits.slice(0, all.length).split("").forEach((d, k) => all[k].value = d);
+      all[Math.min(digits.length, all.length) - 1].focus(); }
+  });
+});
+async function unlockCode() {
+  const code = [...document.querySelectorAll("#codeEntry input")]
+    .map(i => i.value).join("");
+  if (code.length !== 6) { $("lockerr").textContent = "Enter all 6 digits."; return; }
+  $("unlockbtn").disabled = true; $("lockerr").textContent = "";
+  try {
+    const fd = new FormData(); fd.append("code", code);
+    const r = await fetch("/api/auth/verify", { method: "POST", body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.session) {
+      SESSION = d.session; localStorage.setItem("copcat_session", SESSION);
+      enterApp();
+    } else {
+      $("lockerr").textContent = d.error || "That code did not work.";
+    }
+  } finally { $("unlockbtn").disabled = false; }
+}
+function unlockKey() {
+  const k = $("key_input").value.trim();
+  if (!k) return;
+  KEY = k; localStorage.setItem("copcat_key", KEY);
+  enterApp();
+}
+function lockWorkspace() {
+  SESSION = ""; KEY = "";
+  localStorage.removeItem("copcat_session");
+  localStorage.removeItem("copcat_key");
+  showLock(AUTHMODE);
+}
+
+/* ---------- app ---------- */
+function enterApp() {
+  $("lock").classList.remove("on");
+  $("app").classList.add("on");
+  refreshHome();
+  const id = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
+  if (id) openJob(id);
+}
+function goHome() {
+  $("home").classList.remove("hidden");
+  $("jobview").classList.add("hidden");
+  $("nav_overview").classList.add("active");
+  location.hash = "";
+  refreshHome();
+}
+function newJob() {
+  $("file").value = ""; $("rubric").value = ""; $("starterfile").value = "";
+  $("uploadinfo").textContent = "";
+  $("rubricinfo").innerHTML = 'Rubric: <b>none</b>';
+  $("starterinfo").innerHTML = 'Starter code: <b>none</b>';
+  $("preserve").value = "";
+  goHome();
+}
+async function refreshHome() {
+  const rs = await api("/api/stats");
+  if (rs.ok) {
+    const s = await rs.json();
+    $("st_subs").textContent = s.submissions;
+    $("st_review").textContent = s.needs_review;
+    $("st_graded").textContent = s.graded;
+  }
+  const r = await api("/api/jobs");
+  if (!r.ok) return;
+  const d = await r.json();
+  const box = $("joblist"); box.innerHTML = "";
+  const jobs = d.jobs || [];
+  if (!jobs.length) {
+    box.innerHTML = '<p class="note">No jobs yet — upload a batch above to start.</p>';
+    return;
+  }
+  for (const j of jobs) {
+    const st = j.stats || {};
+    const el = document.createElement("div");
+    el.className = "job";
+    el.onclick = () => openJob(j.job_id);
+    const nums = [];
+    if (st.flagged != null) nums.push(st.flagged + " flagged");
+    if (st.graded) nums.push(st.graded + " graded");
+    if (st.submissions) nums.push(st.submissions + " submissions");
+    el.innerHTML =
+      `<span class="pill pill-${j.status}">${j.status}</span>` +
+      `<button class="del" title="Delete" onclick="deleteJob('${j.job_id}', event)">✕</button>` +
+      `<div class="when">${j.created || ""}${j.mode ? " · " + j.mode : ""}</div>` +
+      `<div class="nums">${nums.join(" · ") || "&nbsp;"}</div>` +
+      `<div class="id">${j.job_id}</div>`;
+    box.appendChild(el);
+  }
+}
+async function deleteJob(id, ev) {
+  ev.stopPropagation();
+  if (!confirm("Delete job " + id + " and all its uploads/results?")) return;
+  await api(`/api/jobs/${id}`, { method: "DELETE" });
+  if (jobId === id) goHome();
+  refreshHome();
+}
+async function openJob(id) {
+  const r = await api(`/api/jobs/${id}`);
+  if (r.status === 404) { refreshHome(); return; }
+  if (r.status === 401) return;
+  const d = await r.json();
+  jobId = id; location.hash = "j=" + id;
+  $("nav_overview").classList.remove("active");
+  $("home").classList.add("hidden");
+  $("jobview").classList.remove("hidden");
+  $("jv_title").textContent = "Job " + id;
+  if (d.status === "done") renderJob(d);
+  else if (d.status === "error") {
+    $("jv_pill").innerHTML = '<span class="pill pill-error">error</span>';
+    $("jv_flagged").textContent = "—"; $("gradebook").innerHTML =
+      '<p class="note">This job failed: ' + (d.error || "unknown") + '</p>';
+  } else {
+    $("jv_pill").innerHTML = '<span class="pill pill-' + d.status + '">' + d.status + '</span>';
+  }
+}
+
+/* ---------- upload & run ---------- */
 const drop = $("drop");
 drop.onclick = () => $("file").click();
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
@@ -133,98 +581,33 @@ drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over");
   if (e.dataTransfer.files.length) { $("file").files = e.dataTransfer.files; showUploadInfo(); } };
 $("file").onchange = showUploadInfo;
-$("rubric").onchange = () => {
-  const r = $("rubric").files[0];
-  $("rubricinfo").textContent = r ? "✓ " + r.name : "";
-};
-$("starterfile").onchange = () => {
-  const st = $("starterfile").files[0];
-  $("starterinfo").textContent = st ? "✓ " + st.name : "";
-};
-
 function showUploadInfo() {
   const f = $("file").files[0];
   $("uploadinfo").textContent = f
-    ? "✓ Selected: " + f.name + " (" + (f.size / 1024).toFixed(0) + " KB)"
-    : "";
+    ? "✓ " + f.name + " — " + (f.size / 1024).toFixed(0) + " KB" : "";
 }
+$("rubric").onchange = () => { const f = $("rubric").files[0];
+  $("rubricinfo").innerHTML = "Rubric: <b>" + (f ? f.name : "none") + "</b>"; };
+$("starterfile").onchange = () => { const f = $("starterfile").files[0];
+  $("starterinfo").innerHTML = "Starter code: <b>" + (f ? f.name : "none") + "</b>"; };
+document.querySelectorAll("#modeseg button").forEach(b => {
+  b.onclick = () => {
+    runMode = b.dataset.mode;
+    document.querySelectorAll("#modeseg button")
+      .forEach(x => x.classList.toggle("on", x === b));
+  };
+});
 
-/* fetch wrapper: attaches the access key / session (if set) and routes
-   401s into the right unlock flow */
-async function api(url, opts = {}, retry = true) {
-  opts.headers = Object.assign({}, opts.headers,
-    KEY ? { "x-copcat-key": KEY } : {},
-    SESSION ? { "x-copcat-session": SESSION } : {});
-  const r = await fetch(url, opts);
-  if (r.status === 401 && retry) {
-    const body = await r.clone().json().catch(() => ({}));
-    if (body.mode === "code") { showGate(); return r; }
-    const k = prompt("This CopCat instance requires an access key:");
-    if (k !== null) { KEY = k; localStorage.setItem("copcat_key", KEY); return api(url, opts, false); }
-  }
-  return r;
-}
+function setBusy(b) { $("runbtn").disabled = b; }
 
-function showGate() { $("gate").classList.remove("hidden"); }
-
-async function requestCode() {
-  $("gate_err").textContent = "";
-  $("gate_req").disabled = true;
-  try {
-    const fd = new FormData(); fd.append("note", $("gate_note").value);
-    const r = await fetch("/api/auth/request", { method: "POST", body: fd });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "request failed");
-    $("gate_enter_row").classList.remove("hidden");
-    $("gate_msg").textContent = "Code sent to the owner. Ask them for it — it expires in 5 minutes.";
-    $("gate_code").focus();
-  } catch (e) {
-    $("gate_err").textContent = String(e.message || e);
-  } finally { $("gate_req").disabled = false; }
-}
-
-async function verifyCode() {
-  $("gate_err").textContent = "";
-  const fd = new FormData(); fd.append("code", $("gate_code").value.trim());
-  const r = await fetch("/api/auth/verify", { method: "POST", body: fd });
-  const d = await r.json().catch(() => ({}));
-  if (r.ok && d.session) {
-    SESSION = d.session;
-    localStorage.setItem("copcat_session", SESSION);
-    $("gate").classList.add("hidden");
-    refreshHistory();
-    const id = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
-    if (id) openJob(id);
-  } else {
-    $("gate_err").textContent = d.error || "verification failed";
-  }
-}
-
-function enterKey() {
-  const k = prompt("Access key:");
-  if (k !== null) {
-    KEY = k; localStorage.setItem("copcat_key", KEY);
-    $("gate").classList.add("hidden");
-    refreshHistory();
-  }
-}
-
-function setBusy(b) {
-  ["b-audit", "b-grade", "b-both"].forEach(id => $(id).disabled = b);
-}
-
-async function run(mode) {
+async function run() {
   const f = $("file").files[0];
   if (!f) { alert("Choose a submissions file first"); return; }
   const up = new FormData();
   up.append("submissions", f);
-  const rub = $("rubric").files[0];
-  if (rub) up.append("rubric", rub);
-  const stf = $("starterfile").files[0];
-  if (stf) up.append("starter", stf);
+  if ($("rubric").files[0]) up.append("rubric", $("rubric").files[0]);
+  if ($("starterfile").files[0]) up.append("starter", $("starterfile").files[0]);
   $("err").textContent = "";
-  $("status").textContent = "Uploading...";
-  $("bar").style.width = "8%";
   setBusy(true);
   try {
     const r1 = await api("/api/jobs", { method: "POST", body: up });
@@ -232,131 +615,98 @@ async function run(mode) {
     if (!r1.ok || d1.error) throw new Error(d1.error || "upload failed");
     jobId = d1.job_id;
     location.hash = "j=" + jobId;
-    const runF = new FormData();
-    runF.append("mode", mode);
-    runF.append("preserve", $("preserve").value);
-    const t0 = Date.now();
-    clearInterval(runTimer);
-    runTimer = setInterval(() => {
-      $("status").textContent = "running for " + Math.round((Date.now() - t0) / 1000) +
-        "s — a full batch can take a few minutes, keep this tab open";
-      $("bar").style.width = Math.min(92, 10 + (Date.now() - t0) / 4000) + "%";
-    }, 500);
-    const r2 = await api(`/api/jobs/${jobId}/run`, { method: "POST", body: runF });
+    // live progress while the run request is in flight
+    t0 = Date.now();
+    clearInterval(pollTimer);
+    pollTimer = setInterval(pollProgress, 2000);
+    pollProgress();
+    const rf = new FormData();
+    rf.append("mode", runMode);
+    rf.append("preserve", $("preserve").value);
+    const r2 = await api(`/api/jobs/${jobId}/run`, { method: "POST", body: rf });
+    clearInterval(pollTimer);
     const d2 = await r2.json();
-    clearInterval(runTimer);
     if (d2.status === "error") {
-      $("bar").style.width = "0%";
-      $("status").textContent = "failed";
-      $("err").textContent = d2.error || "unknown error";
+      $("err").textContent = d2.error || "the job failed";
+      refreshHome();
     } else {
-      render(d2);
+      await openJob(jobId);
+      refreshHome();
     }
-    refreshHistory();
   } catch (e) {
-    clearInterval(runTimer);
-    $("bar").style.width = "0%";
-    $("status").textContent = "failed";
+    clearInterval(pollTimer);
     $("err").textContent = String(e.message || e);
-  } finally {
-    setBusy(false);
-  }
+  } finally { setBusy(false); }
 }
 
-async function openJob(id) {
-  const r = await api(`/api/jobs/${id}`);
-  if (r.status === 404) { alert("Job no longer exists"); refreshHistory(); return; }
+const PHASES = { load: "Reading submissions", pairs: "Comparing pairs",
+                 grade: "Grading submissions", report: "Writing reports" };
+async function pollProgress() {
+  const r = await fetch(`/api/jobs/${jobId}`,
+    SESSION ? { headers: { "x-copcat-session": SESSION } } : {})
+    .catch(() => null);
+  if (!r || !r.ok) return;
   const d = await r.json();
-  jobId = id;
-  location.hash = "j=" + id;
-  $("err").textContent = d.error || "";
-  if (d.status === "done") { render(d); }
-  else {
-    $("results").classList.add("hidden");
-    $("bar").style.width = "0%";
-    $("status").textContent = `job ${id}: ${d.status}` +
-      (d.mode ? ` (mode: ${d.mode})` : "") +
-      (d.status === "error" ? " — re-run to retry" : "");
-  }
-}
-
-async function deleteJob(id, ev) {
-  ev.stopPropagation();
-  if (!confirm("Delete job " + id + " and all its uploads/results?")) return;
-  await api(`/api/jobs/${id}`, { method: "DELETE" });
-  if (jobId === id) { jobId = null; location.hash = "";
-    $("results").classList.add("hidden"); $("status").textContent = ""; }
-  refreshHistory();
-}
-
-async function refreshHistory() {
-  const r = await api("/api/jobs");
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    $("history").classList.remove("hidden");
-    $("joblist").innerHTML = '<div class="err">' +
-      (e.error || ("job history unavailable (HTTP " + r.status + ")")) +
-      "</div>";
+  const p = d.progress;
+  $("progcard").classList.remove("hidden");
+  const secs = Math.round((Date.now() - t0) / 1000);
+  $("prog_elapsed").textContent = "elapsed " + Math.floor(secs / 60) + "m " + (secs % 60) + "s";
+  if (!p) {
+    $("prog_phase").textContent = "Working";
+    $("prog_done").textContent = "…"; $("prog_total").textContent = "";
+    $("prog_pending").textContent = "";
+    $("prog_bar").style.width = "12%";
     return;
   }
-  const d = await r.json();
-  const jobs = d.jobs || [];
-  $("history").classList.toggle("hidden", jobs.length === 0);
-  const box = $("joblist"); box.innerHTML = "";
-  for (const j of jobs) {
-    const row = document.createElement("div");
-    row.className = "jrow";
-    row.style.cursor = "pointer";
-    row.onclick = () => openJob(j.job_id);
-    const what = (j.summary && j.summary.gradebook !== undefined && (j.summary.gradebook || []).length)
-      ? `${j.summary.gradebook.length} graded` : "";
-    const npairs = j.summary && j.summary.pairs ? j.summary.pairs.length : 0;
-    row.innerHTML =
-      `<span class="id">${j.job_id}</span>` +
-      `<span class="pill pill-${j.status}">${j.status}</span>` +
-      `<span class="meta">${j.created || ""}</span>` +
-      `<span class="meta">${j.mode || ""}${j.mode ? " · " : ""}` +
-      `${npairs ? npairs + " flagged pairs" : ""}${npairs && what ? " · " : ""}${what}</span>` +
-      `<span class="open"><button class="danger" onclick="deleteJob('${j.job_id}', event)">delete</button></span>`;
-    box.appendChild(row);
-  }
+  $("prog_phase").textContent = PHASES[p.phase] || "Working";
+  const pct = p.total ? Math.round(100 * p.done / p.total) : 0;
+  $("prog_done").textContent = p.done;
+  $("prog_total").textContent = p.total;
+  $("prog_pending").textContent = (p.total - p.done) + " pending";
+  $("prog_bar").style.width = Math.max(6, pct) + "%";
 }
 
-function render(d) {
-  $("bar").style.width = "100%";
-  $("status").textContent = `done in ${d.runtime_s}s`;
-  $("results").classList.remove("hidden");
+/* ---------- results ---------- */
+function renderJob(d) {
+  $("jv_pill").innerHTML = '<span class="pill pill-done">done</span>';
+  const S = d.summary || {};
+  const st = d.stats || {};
+  $("jv_subs").textContent = st.submissions ?? "—";
+  $("jv_pairs").textContent = st.pairs ?? "—";
+  $("jv_flagged").textContent = (S.pairs || []).length;
+  $("jv_graded").textContent = st.graded ?? (S.gradebook || []).length || "—";
+  $("progcard").classList.add("hidden");
   $("dlcsv").href = `/api/jobs/${jobId}/gradebook.csv`;
-  $("dlcsv").classList.remove("hidden");
+  $("dlcsv").classList.toggle("hidden", !(S.gradebook || []).length);
+  const hasAudit = (S.pairs || []).length > 0 || st.pairs > 0;
+  $("linkindex").style.display = hasAudit ? "" : "none";
+  $("linkaudit").style.display = hasAudit ? "" : "none";
   $("linkindex").href = `/api/jobs/${jobId}/report/index.html`;
   $("linkaudit").href = `/api/jobs/${jobId}/report/copcat_audit.txt`;
-  const S = d.summary || {};
+
   const flagged = (S.pairs || []).slice();
-  const rank = {HIGH_PROBABILITY_PLAGIARISM: 0, SUSPICIOUS: 1};
+  const rank = { HIGH_PROBABILITY_PLAGIARISM: 0, SUSPICIOUS: 1 };
   flagged.sort((p1, p2) => (rank[p1.flag] ?? 2) - (rank[p2.flag] ?? 2)
     || p2.blended - p1.blended);
-  $("linkindex").style.display = flagged.length ? "" : "none";
-  $("linkaudit").style.display = flagged.length ? "" : "none";
-  $("dlcsv").style.display = (S.gradebook || []).length ? "" : "none";
   const tbody = $("pairs").tBodies[0]; tbody.innerHTML = "";
   for (const p of flagged) {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${p.a}</td><td>${p.b}</td>` +
       `<td>${p.blended}%${p.evasion != null ?
         ` <span class="note">(evasion ${p.evasion}%)</span>` : ""}</td>` +
-      `<td><span class="flag-${p.flag}">${p.flag}</span></td>` +
+      `<td><span class="flag-${p.flag}">${p.flag.replace(/_/g, " ")}</span></td>` +
       `<td><a href="/api/jobs/${jobId}/dossier/${p.a}/${p.b}" target="_blank">open dossier</a></td>`;
     tbody.appendChild(tr);
   }
   $("clusters").innerHTML = flagged.length
-    ? "<h2>Clusters</h2>" + [...new Set(flagged.flatMap(p => [p.a, p.b]))]
+    ? "<h2 class='sec'>Clusters</h2>" + [...new Set(flagged.flatMap(p => [p.a, p.b]))]
         .map(r => `<span class="cluster">${r}</span>`).join("")
     : "";
   const gb = S.gradebook || [];
   if (gb.length) {
     const keys = Object.keys(gb[0].task_scores || {});
-    let t = "<table><tr><th onclick='sortTable(0)'>Roll</th><th>File</th><th>Final</th>";
-    keys.forEach((k, i) => t += `<th onclick='sortTable(${i + 3})'>${k}</th>`);
+    let t = "<table><tr><th>Roll</th><th>File</th><th>Final</th>";
+    keys.forEach(k => t += `<th>${k}</th>`);
     t += "<th>Deductions</th></tr>";
     for (const g of gb) {
       t += `<tr><td>${g.roll}</td><td>${g.filename}</td><td><b>${g.final}</b></td>`;
@@ -380,16 +730,16 @@ function sortTable(col) {
 
 window.addEventListener("hashchange", () => {
   const id = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
-  if (id && id !== jobId) openJob(id);
+  if (id && id !== jobId && !$("app").classList.contains("on")) enterApp();
+  else if (id && id !== jobId) openJob(id);
 });
 
+/* ---------- boot ---------- */
 fetch("/api/auth/mode").then(r => r.json()).then(d => {
-  if (d.mode === "code" && !SESSION && !KEY) showGate();
-}).catch(() => {});
-
-refreshHistory();
-const initial = (location.hash.match(/j=([0-9a-f]+)/) || [])[1];
-if (initial) openJob(initial);
+  AUTHMODE = d.mode;
+  if (AUTHMODE === "open" || SESSION || KEY) enterApp();
+  else showLock(AUTHMODE);
+}).catch(() => { enterApp(); });
 </script>
 </body>
 </html>

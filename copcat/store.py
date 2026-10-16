@@ -77,8 +77,11 @@ class DiskStore:
 
     def save_meta(self, meta):
         os.makedirs(os.path.join(self.root, _META_DIR), exist_ok=True)
-        with open(self._meta_path(meta["job_id"]), "w", encoding="utf-8") as fh:
+        path = self._meta_path(meta["job_id"])
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(meta, fh)
+        os.replace(tmp, path)     # atomic: progress polls never read half a file
 
     def get_meta(self, job_id):
         path = self._meta_path(job_id)

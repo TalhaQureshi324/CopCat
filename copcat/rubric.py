@@ -659,12 +659,15 @@ def grade_submission(path, src, rubric):
     }
 
 
-def grade_batch(files_by_roll, rubric):
+def grade_batch(files_by_roll, rubric, progress=None):
     """files_by_roll: {roll: [(filename, path, source), ...]}.
     Returns rows (one per roll) applying the multi-file penalty (-2.0 when a
     student submitted more than one file; their best file counts)."""
+    rolls = sorted(files_by_roll)
+    if progress:
+        progress("grade", 0, len(rolls))
     rows = []
-    for roll in sorted(files_by_roll):
+    for k, roll in enumerate(rolls, 1):
         entries = files_by_roll[roll]
         graded = []
         for fname, path, src in entries:
@@ -672,6 +675,8 @@ def grade_batch(files_by_roll, rubric):
             graded.append((g, fname))
         graded.sort(key=lambda t: -t[0]["final"])
         best, best_name = graded[0]
+        if progress:
+            progress("grade", k, len(rolls))
         penalties = 0.0
         report_bits = []
         for task_id, deduct, detail in best["failed"]:
@@ -698,7 +703,8 @@ def grade_batch(files_by_roll, rubric):
     return rows
 
 
-def run_grade(directory, rubric_path, out_csv, timeout_s=None, memory_mb=None):
+def run_grade(directory, rubric_path, out_csv, timeout_s=None,
+              memory_mb=None, progress=None):
     """Grade every submission in `directory` (or ZIP) against the rubric."""
     import csv
     from .ingest import discover, extract_roll
@@ -736,7 +742,7 @@ def run_grade(directory, rubric_path, out_csv, timeout_s=None, memory_mb=None):
         files_by_roll.setdefault(roll, []).append((fname, path, src))
 
     task_ids = [t["id"] for t in rubric["tasks"]]
-    rows = grade_batch(files_by_roll, rubric)
+    rows = grade_batch(files_by_roll, rubric, progress=progress)
 
     out_dir = os.path.dirname(os.path.abspath(out_csv))
     os.makedirs(out_dir, exist_ok=True)

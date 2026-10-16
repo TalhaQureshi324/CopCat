@@ -75,7 +75,7 @@ def compare_pair(a, b, cfg):
     )
 
 
-def compare_all(subs, cfg, workers=1):
+def compare_all(subs, cfg, workers=1, progress=None):
     jobs = []
     n = len(subs)
     for i in range(n):
@@ -86,13 +86,21 @@ def compare_all(subs, cfg, workers=1):
                 continue
             jobs.append((a, b))
 
+    if progress and jobs:
+        progress("pairs", 0, len(jobs))
     if workers and workers > 1 and len(jobs) > 64:
         from concurrent.futures import ProcessPoolExecutor
         with ProcessPoolExecutor(max_workers=workers) as ex:
             results = list(ex.map(_compare_job,
                                   [(a, b, cfg) for a, b in jobs]))
+        if progress:
+            progress("pairs", len(jobs), len(jobs))
     else:
-        results = [compare_pair(a, b, cfg) for a, b in jobs]
+        results = []
+        for i, (a, b) in enumerate(jobs, 1):
+            results.append(compare_pair(a, b, cfg))
+            if progress and (i % 10 == 0 or i == len(jobs)):
+                progress("pairs", i, len(jobs))
 
     results.sort(key=lambda r: r.blended, reverse=True)
     return results
