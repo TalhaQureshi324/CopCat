@@ -506,6 +506,18 @@ async def dossier(job_id: str, roll_a: str, roll_b: str, request: Request):
     return Response(content=data, media_type="text/html")
 
 
+@app.get("/api/logo/{variant}")
+async def logo(variant: str):
+    """Theme logo asset (public: used on the lock screen)."""
+    name = {"light": "logo_light.png", "dark": "logo_dark.png"}.get(
+        variant, "logo_light.png")
+    path = os.path.join(WEB_ROOT, name)
+    if not os.path.isfile(path):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(path, media_type="image/png",
+                        headers={"cache-control": "public, max-age=86400"})
+
+
 @app.get("/healthz")
 async def healthz():
     return PlainTextResponse("ok")

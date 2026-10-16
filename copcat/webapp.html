@@ -30,7 +30,10 @@ button { font-family:inherit; }
 #lock { position:fixed; inset:0; background:var(--bg); z-index:50;
   display:flex; align-items:center; justify-content:center; }
 .lockbox { text-align:center; max-width:430px; width:100%; padding:24px; }
-.lockbox .logo { width:56px; height:56px; margin:0 auto 6px; display:block; }
+.logo-img { height:30px; width:auto; display:block; }
+.lockbox .logo-img { height:62px; margin:0 auto 10px; }
+html[data-theme="dark"] .light-only { display:none; }
+html:not([data-theme="dark"]) .dark-only { display:none; }
 .lockbox h1 { font-size:26px; margin:10px 0 4px; letter-spacing:-.3px; }
 .lockbox .sub { color:var(--muted); margin-bottom:26px; }
 .codeRow { display:flex; gap:9px; justify-content:center; align-items:center;
@@ -200,13 +203,8 @@ a:hover { text-decoration:underline; }
 <!-- ============ LOCK SCREEN ============ -->
 <div id="lock" class="on">
   <div class="lockbox">
-    <svg class="logo" viewBox="0 0 44 44" fill="none">
-      <path d="M10 15 L12.5 5 L19.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="M34 15 L31.5 5 L24.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-      <rect x="8" y="10" width="28" height="28" rx="8" fill="var(--accent)"/>
-      <rect x="14" y="16" width="16" height="16" rx="3" fill="var(--surface)"/>
-      <path d="M17.5 20.5h9M17.5 24h9M17.5 27.5h5.5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>
+    <img class="logo-img light-only" src="/api/logo/light" alt="CopCat">
+    <img class="logo-img dark-only" src="/api/logo/dark" alt="CopCat">
     <h1>Welcome back.</h1>
     <div class="sub" id="locksub">Enter your access code to continue to your workspace.</div>
 
@@ -248,14 +246,8 @@ a:hover { text-decoration:underline; }
 <div id="app">
   <aside>
     <div class="brand">
-      <svg class="logo" viewBox="0 0 44 44" fill="none">
-        <path d="M10 15 L12.5 5 L19.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-        <path d="M34 15 L31.5 5 L24.5 11.5" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-        <rect x="8" y="10" width="28" height="28" rx="8" fill="var(--accent)"/>
-        <rect x="14" y="16" width="16" height="16" rx="3" fill="var(--surface)"/>
-        <path d="M17.5 20.5h9M17.5 24h9M17.5 27.5h5.5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"/>
-      </svg>
-      <b>CopCat</b>
+      <img class="logo-img light-only" src="/api/logo/light" alt="CopCat">
+      <img class="logo-img dark-only" src="/api/logo/dark" alt="CopCat">
     </div>
     <button class="navitem active" id="nav_overview" onclick="goHome()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
