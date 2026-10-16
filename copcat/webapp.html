@@ -35,7 +35,13 @@ button { font-family:inherit; }
 html[data-theme="dark"] .light-only { display:none; }
 html:not([data-theme="dark"]) .dark-only { display:none; }
 .lockbox h1 { font-size:26px; margin:10px 0 4px; letter-spacing:-.3px; }
-.lockbox .sub { color:var(--muted); margin-bottom:26px; }
+.lockbox .sub { color:var(--muted); margin-bottom:22px; }
+.locktabs { display:inline-flex; background:var(--bg); border:1px solid var(--line2);
+  border-radius:99px; padding:3px; margin-bottom:18px; }
+.locktabs button { border:none; background:none; color:var(--muted);
+  padding:7px 18px; border-radius:99px; font-size:12.5px; font-weight:600;
+  cursor:pointer; transition:color .15s; }
+.locktabs button.on { background:var(--accent); color:var(--accent-ink); }
 .codeRow { display:flex; gap:9px; justify-content:center; align-items:center;
   background:var(--surface); border:1px solid var(--line2); border-radius:14px;
   padding:14px 16px; box-shadow:var(--shadow); margin-bottom:16px; }
@@ -208,6 +214,11 @@ a:hover { text-decoration:underline; }
     <h1>Welcome back.</h1>
     <div class="sub" id="locksub">Enter your access code to continue to your workspace.</div>
 
+    <div class="locktabs">
+      <button id="tab_code" class="on" onclick="lockTab('code')">Access code</button>
+      <button id="tab_key" onclick="lockTab('key')">Access key</button>
+    </div>
+
     <div class="lockpanel hidden" id="reqpanel">
       <label>Your name / purpose (helps the owner decide)</label>
       <input type="text" id="req_note" placeholder="e.g. Hamza — TA for section B">
@@ -231,9 +242,9 @@ a:hover { text-decoration:underline; }
 
     <div id="keyEntry" class="hidden">
       <div class="codeRow keyRow">
-        <input type="text" id="key_input" placeholder="Access key" autocomplete="off">
+        <input type="text" id="key_input" placeholder="Owner access key" autocomplete="off">
       </div>
-      <button class="btn" onclick="unlockKey()">Unlock workspace&ensp;&rarr;</button>
+      <button class="btn" id="keybtn" onclick="unlockKey()">Unlock workspace&ensp;&rarr;</button>
     </div>
 
     <div id="lockerr" class="err"></div>
@@ -407,14 +418,23 @@ function showLock(mode) {
   AUTHMODE = mode || AUTHMODE;
   $("app").classList.remove("on");
   $("lock").classList.add("on");
-  $("reqlink").classList.toggle("hidden", AUTHMODE !== "code");
-  $("codeEntry").classList.toggle("hidden", AUTHMODE !== "code");
-  $("keyEntry").classList.toggle("hidden", AUTHMODE !== "key");
-  $("locksub").textContent = AUTHMODE === "key"
-    ? "Enter your access key to continue to your workspace."
-    : "Enter your access code to continue to your workspace.";
-  if (AUTHMODE === "key") $("key_input").focus();
-  else { const f = document.querySelectorAll("#codeEntry input"); f[0] && f[0].focus(); }
+  // pure-key deployments have no code flow: hide the code tab + request link
+  $("tab_code").classList.toggle("hidden", AUTHMODE !== "code");
+  lockTab(AUTHMODE === "key" ? "key" : "code");
+}
+function lockTab(which) {
+  const code = which !== "key";
+  $("tab_code").classList.toggle("on", code);
+  $("tab_key").classList.toggle("on", !code);
+  $("codeEntry").classList.toggle("hidden", !code);
+  $("keyEntry").classList.toggle("hidden", code);
+  $("locksub").textContent = code
+    ? "Enter your access code to continue to your workspace."
+    : "Enter your owner access key to continue to your workspace.";
+  $("reqlink").classList.toggle("hidden", !code || AUTHMODE !== "code");
+  $("lockerr").textContent = "";
+  const first = code ? document.querySelector("#codeEntry input") : $("key_input");
+  if (first) setTimeout(() => first.focus(), 30);
 }
 function showRequest() {
   $("reqpanel").classList.remove("hidden");
@@ -434,14 +454,17 @@ async function requestCode() {
     $("reqerr").classList.remove("hidden");
   } finally { $("reqbtn").disabled = false; }
 }
-/* six code boxes: auto-advance, backspace, paste */
+/* six code boxes: auto-advance, backspace, paste; Enter submits */
 document.querySelectorAll("#codeEntry input").forEach((inp, i, all) => {
   inp.addEventListener("input", () => {
     inp.value = inp.value.replace(/\D/g, "").slice(-1);
     if (inp.value && i < all.length - 1) all[i + 1].focus();
+    if (all[0].value && all[all.length - 1].value &&
+        [...all].every(x => x.value)) unlockCode();
   });
   inp.addEventListener("keydown", e => {
     if (e.key === "Backspace" && !inp.value && i > 0) all[i - 1].focus();
+    if (e.key === "Enter") unlockCode();
   });
   inp.addEventListener("paste", e => {
     const digits = (e.clipboardData.getData("text") || "").replace(/\D/g, "");
@@ -449,6 +472,9 @@ document.querySelectorAll("#codeEntry input").forEach((inp, i, all) => {
       digits.slice(0, all.length).split("").forEach((d, k) => all[k].value = d);
       all[Math.min(digits.length, all.length) - 1].focus(); }
   });
+});
+$("key_input").addEventListener("keydown", e => {
+  if (e.key === "Enter") unlockKey();
 });
 async function unlockCode() {
   const code = [...document.querySelectorAll("#codeEntry input")]
@@ -467,11 +493,24 @@ async function unlockCode() {
     }
   } finally { $("unlockbtn").disabled = false; }
 }
-function unlockKey() {
+async function unlockKey() {
   const k = $("key_input").value.trim();
   if (!k) return;
-  KEY = k; localStorage.setItem("copcat_key", KEY);
-  enterApp();
+  $("keybtn").disabled = true;
+  $("lockerr").textContent = "";
+  try {
+    // verify before entering, so a wrong key gets an inline error
+    const r = await fetch("/api/jobs", { headers: { "x-copcat-key": k } });
+    if (r.status === 401) {
+      $("lockerr").textContent = "That access key was not accepted.";
+      return;
+    }
+    KEY = k;
+    localStorage.setItem("copcat_key", KEY);
+    enterApp();
+  } catch (e) {
+    $("lockerr").textContent = String(e.message || e);
+  } finally { $("keybtn").disabled = false; }
 }
 function lockWorkspace() {
   SESSION = ""; KEY = "";
