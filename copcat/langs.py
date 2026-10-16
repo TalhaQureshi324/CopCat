@@ -8,7 +8,7 @@ file can never reach the Python sandbox.
 
 import re
 
-CPP_RE = re.compile(r"\.(?:cpp|cc|cxx|c\+\+|c|h|hh|hpp)$", re.IGNORECASE)
+CPP_RE = re.compile(r"\.(?:cpp|cc|cxx|c\+\+|c|h|hh|hpp|hxx)$", re.IGNORECASE)
 PY_RE = re.compile(r"\.py$", re.IGNORECASE)
 
 
