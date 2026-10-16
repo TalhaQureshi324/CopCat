@@ -84,7 +84,7 @@ def _executive_summary(pair, sub_a, sub_b, cfg, renames, shared_lits,
                           .replace("forensics:", "Forensics -"))
     if evasion_sides:
         hidden, live = evasion_sides
-        n_blocks = len(_matched_lines_blocks(shadow_code_lines(hidden.source),
+        n_blocks = len(_matched_lines_blocks(shadow_code_lines(hidden.source, lang=hidden.lang),
                                              list(live.effective_lines)))
         if n_blocks:
             statements.append(
@@ -133,7 +133,7 @@ def write_dossier(path, sub_a, sub_b, pair, cfg, lab="the assignment"):
     if evasion:
         hidden, live = evasion
         rows_html, eq, tot, truncated = _diff_rows(
-            shadow_code_lines(hidden.source), list(live.effective_lines))
+            shadow_code_lines(hidden.source, lang=hidden.lang), list(live.effective_lines))
         sec7_title = ("7. Evasion alignment &mdash; hidden (commented-out) "
                       "code of {hr} vs live code of {lr} "
                       "({eq} of {tot} lines identical)").format(

@@ -195,6 +195,14 @@ def lex_cpp(src):
     return tokens, comments, strings, code_lines, True
 
 
+def cpp_tokens(text):
+    """Scanner tokens for an arbitrary snippet of (already comment-stripped)
+    C++ code.  The single tokenizer every channel must use - folding and
+    live code must produce identical streams for identical code, or their
+    fingerprints can never meet."""
+    return lex_cpp(text)[0]
+
+
 # --------------------------------------------------------------------------
 # language-aware channel helpers
 # --------------------------------------------------------------------------
@@ -231,7 +239,7 @@ def fold_comments_cpp(comment_pairs):
         if not s or not cpp_code_like(s):
             continue
         code_like += 1
-        shadow.extend(TOKEN_CPP_RE.findall(s))
+        shadow.extend(cpp_tokens(s))
         for m in re.finditer(r'"(?:\\.|[^"\\])*"|' + r"'(?:\\.|[^'\\])*'", s):
             shadow_strings.append(m.group(0))
     return shadow, [s for s in shadow_strings if s.strip()], code_like, total

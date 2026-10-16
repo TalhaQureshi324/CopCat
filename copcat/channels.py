@@ -8,7 +8,7 @@ rename-invariant structure stream (identifiers collapsed)."""
 from .langs import lang_of
 from .lexing import lex, normalize_words, TOKEN_RE
 from .lex_cpp import (lex_cpp, fold_comments_cpp, cpp_canonical_tokens,
-                      cpp_code_like, strip_cpp_comment, TOKEN_CPP_RE)
+                      cpp_code_like, strip_cpp_comment, cpp_tokens)
 from .canon import canonical_tokens
 from .shadow import fold_comments, CODE_LIKE_RE, _strip_hash
 from .normal import fingerprint, fingerprint_adaptive, word_shingles
@@ -65,7 +65,7 @@ def build_submission(roll, filename, path, source, cfg):
     if len(code_lines) < 0.30 * max(nonblank, 1):
         if cpp:
             sub.effective_lines = [
-                " ".join(TOKEN_CPP_RE.findall(strip_cpp_comment(ln)))
+                " ".join(cpp_tokens(strip_cpp_comment(ln)))
                 for ln in source.splitlines() if is_code_like_line(ln, "cpp")]
         else:
             sub.effective_lines = [
@@ -100,7 +100,8 @@ def decomment_lines(src, lang="python"):
             while s.startswith("#"):
                 s = s.lstrip("#").strip()
         if s:
-            out.append(" ".join(TOKEN_RE.findall(s)))
+            toks = cpp_tokens(s) if lang == "cpp" else TOKEN_RE.findall(s)
+            out.append(" ".join(toks))
     return out
 
 
@@ -138,7 +139,7 @@ def source_code_lines(src, lang="python"):
         _t, _c, _s, code_lines, _ok = lex_cpp(src)
         nonblank = sum(1 for _ in src.splitlines() if _.strip())
         if len(code_lines) < 0.30 * max(nonblank, 1):
-            return [" ".join(TOKEN_CPP_RE.findall(strip_cpp_comment(ln)))
+            return [" ".join(cpp_tokens(strip_cpp_comment(ln)))
                     for ln in src.splitlines() if is_code_like_line(ln, "cpp")]
         return code_lines
     tokens, comments, strings, code_lines, _ = lex(src)
