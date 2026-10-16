@@ -3,6 +3,8 @@
 import os
 import re
 
+from .langs import is_source
+
 ROLL_RE = re.compile(r"bscs(\d{3,7})", re.IGNORECASE)
 
 
@@ -35,9 +37,18 @@ def discover(directory, extra_excludes=()):
 
 
 def load_sources(directory, extra_excludes=()):
-    """[(path, roll, filename, source)]"""
+    """[(path, roll, filename, source)] over every ingested language
+    (Python + C/C++) - the audit pipeline's directory input."""
+    excludes = {"copcat_audit.csv", "copcat_audit.txt",
+                "lab02_evaluation_report.csv", "plagiarism_audit.txt"}
+    excludes.update(extra_excludes)
     results = []
-    for path in discover(directory, extra_excludes):
+    for name in sorted(os.listdir(directory)):
+        path = os.path.join(directory, name)
+        if not os.path.isfile(path) or not is_source(name):
+            continue
+        if name in excludes or name.startswith("copcat_"):
+            continue
         with open(path, encoding="utf-8-sig", errors="replace") as fh:
             src = fh.read()
         fname = os.path.basename(path)

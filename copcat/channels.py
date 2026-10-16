@@ -1,7 +1,14 @@
 """Build all fingerprint channels for a submission, with optional
-starter/base-code subtraction (MOSS `-b` equivalent)."""
+starter/base-code subtraction (MOSS `-b` equivalent).
 
+Language-aware: Python submissions go through the stdlib-tokenizer lexer
+and the AST canonicalizer; C/C++ submissions go through lex_cpp and a
+rename-invariant structure stream (identifiers collapsed)."""
+
+from .langs import lang_of
 from .lexing import lex, normalize_words, TOKEN_RE
+from .lex_cpp import (lex_cpp, fold_comments_cpp, cpp_canonical_tokens,
+                      cpp_code_like, strip_cpp_comment, TOKEN_CPP_RE)
 from .canon import canonical_tokens
 from .shadow import fold_comments, CODE_LIKE_RE, _strip_hash
 from .normal import fingerprint, fingerprint_adaptive, word_shingles
@@ -10,8 +17,10 @@ WINNOW_CHANNELS = ("token", "ast", "shadow")
 SHINGLE_CHANNELS = ("comment", "string")
 
 
-def is_code_like_line(raw):
-    s = _strip_hash(raw)
+def is_code_like_line(raw, lang="python"):
+    s = strip_cpp_comment(raw) if lang == "cpp" else _strip_hash(raw)
+    if lang == "cpp":
+        return bool(s) and cpp_code_like(s)
     return bool(s) and bool(CODE_LIKE_RE.match(s))
 
 
@@ -19,15 +28,21 @@ def build_submission(roll, filename, path, source, cfg):
     from .models import Submission
 
     sub = Submission(roll=roll, filename=filename, path=path, source=source)
+    sub.lang = lang_of(filename)
+    cpp = sub.lang == "cpp"
     sub.n_lines = sum(1 for _ in source.splitlines())
-    tokens, comments, strings, code_lines, _ = lex(source)
+    if cpp:
+        tokens, comments, strings, code_lines, _ = lex_cpp(source)
+    else:
+        tokens, comments, strings, code_lines, _ = lex(source)
     sub.tokens = tokens
     sub.n_comment_lines = len(comments)
     sub.n_code_lines = len(code_lines)
 
     # shadow stream: fold commented-out code (prose stays out); literals
     # inside commented-out code join the string channel
-    shadow_tokens, shadow_strings, code_like, _total = fold_comments(comments)
+    shadow_tokens, shadow_strings, code_like, _total = (
+        fold_comments_cpp(comments) if cpp else fold_comments(comments))
     sub.shadow_tokens = shadow_tokens
     sub.code_like_comment_lines = code_like
 
@@ -36,17 +51,26 @@ def build_submission(roll, filename, path, source, cfg):
     sub.string_words = normalize_words(" ".join(list(strings) + list(shadow_strings)))
 
     # canonical AST channel (fault-tolerant parse inside)
-    sub.canonical_tokens, sub.parse_ok, sub.chunks_failed = \
-        canonical_tokens(source, preserved=())  # audit: rename-invariant
+    if cpp:
+        sub.canonical_tokens, sub.parse_ok, sub.chunks_failed = \
+            cpp_canonical_tokens(source)
+    else:
+        sub.canonical_tokens, sub.parse_ok, sub.chunks_failed = \
+            canonical_tokens(source, preserved=())  # audit: rename-invariant
 
     # source-line channel: token-stripped lines; if the file is mostly
     # comments, fall back to decommented CODE-LIKE lines only (prose lines
     # stay in the comment channel) so hidden code aligns against live code
     nonblank = sum(1 for _ in source.splitlines() if _.strip())
     if len(code_lines) < 0.30 * max(nonblank, 1):
-        sub.effective_lines = [
-            " ".join(TOKEN_RE.findall(_strip_hash(ln)))
-            for ln in source.splitlines() if is_code_like_line(ln)]
+        if cpp:
+            sub.effective_lines = [
+                " ".join(TOKEN_CPP_RE.findall(strip_cpp_comment(ln)))
+                for ln in source.splitlines() if is_code_like_line(ln, "cpp")]
+        else:
+            sub.effective_lines = [
+                " ".join(TOKEN_RE.findall(_strip_hash(ln)))
+                for ln in source.splitlines() if is_code_like_line(ln)]
         sub.notes.append("mostly-commented file; shadow/decomment stream used")
     else:
         sub.effective_lines = code_lines
@@ -66,27 +90,33 @@ def build_submission(roll, filename, path, source, cfg):
     return sub
 
 
-def decomment_lines(src):
+def decomment_lines(src, lang="python"):
     """Strip leading comment markers from every line (for mostly-commented
     files), keeping non-empty lines."""
     out = []
     for ln in src.splitlines():
-        s = ln.strip()
-        while s.startswith("#"):
-            s = s.lstrip("#").strip()
+        s = strip_cpp_comment(ln) if lang == "cpp" else ln.strip()
+        if lang != "cpp":
+            while s.startswith("#"):
+                s = s.lstrip("#").strip()
         if s:
             out.append(" ".join(TOKEN_RE.findall(s)))
     return out
 
 
-def build_starter_profile(starter_sources, cfg):
+def build_starter_profile(starter_sources, cfg, lang="python"):
     """Union of all starter-code fingerprints + normalized line set."""
     fps = {ch: set() for ch in WINNOW_CHANNELS + SHINGLE_CHANNELS}
     lines = set()
     for src in starter_sources:
-        tokens, comments, strings, code_lines, _ = lex(src)
-        shadow_tokens, shadow_strings, _cl, _t = fold_comments(comments)
-        canon, _ok, _f = canonical_tokens(src, preserved=())
+        if lang == "cpp":
+            tokens, comments, strings, code_lines, _ = lex_cpp(src)
+            shadow_tokens, shadow_strings, _cl, _t = fold_comments_cpp(comments)
+            canon, _ok, _f = cpp_canonical_tokens(src)
+        else:
+            tokens, comments, strings, code_lines, _ = lex(src)
+            shadow_tokens, shadow_strings, _cl, _t = fold_comments(comments)
+            canon, _ok, _f = canonical_tokens(src, preserved=())
         fps["token"] |= fingerprint_adaptive(tokens, cfg.k, cfg.window)
         fps["ast"] |= fingerprint_adaptive(canon, cfg.k, cfg.window)
         fps["shadow"] |= fingerprint_adaptive(shadow_tokens, cfg.k, cfg.window)
@@ -96,14 +126,21 @@ def build_starter_profile(starter_sources, cfg):
                                        cfg.comment_ngram)
         for ln in code_lines:
             lines.add(" ".join(ln.split()))
-        for ln in source_code_lines(src):
+        for ln in source_code_lines(src, lang):
             lines.add(" ".join(ln.split()))
     return {"fps": fps, "lines": lines}
 
 
-def source_code_lines(src):
+def source_code_lines(src, lang="python"):
     """Token-stripped code lines; code-like decommented lines when the file
     is mostly comments (mirrors build_submission's source channel)."""
+    if lang == "cpp":
+        _t, _c, _s, code_lines, _ok = lex_cpp(src)
+        nonblank = sum(1 for _ in src.splitlines() if _.strip())
+        if len(code_lines) < 0.30 * max(nonblank, 1):
+            return [" ".join(TOKEN_CPP_RE.findall(strip_cpp_comment(ln)))
+                    for ln in src.splitlines() if is_code_like_line(ln, "cpp")]
+        return code_lines
     tokens, comments, strings, code_lines, _ = lex(src)
     nonblank = sum(1 for _ in src.splitlines() if _.strip())
     if len(code_lines) < 0.30 * max(nonblank, 1):

@@ -6,6 +6,7 @@ import time
 
 from .models import AuditConfig
 from .ingest import load_sources
+from .langs import is_source
 from .channels import (build_submission, build_starter_profile,
                        subtract_starter, apply_batch_damper)
 from .compare import compare_all, apply_evasion_rule
@@ -56,20 +57,27 @@ def run_audit(directory, cfg, out_dir, workers=1, csv_scope="all",
 
     # starter/base-code subtraction
     if cfg.starters:
+        from .langs import lang_of
         starter_srcs = []
+        starter_lang = "python"
         for sp in cfg.starters:
             if os.path.isdir(sp):
                 for name in sorted(os.listdir(sp)):
-                    if name.endswith(".py"):
+                    if is_source(name):
                         with open(os.path.join(sp, name),
                                   encoding="utf-8-sig", errors="replace") as fh:
                             starter_srcs.append(fh.read())
+                        if lang_of(name) == "cpp":
+                            starter_lang = "cpp"
             else:
                 with open(sp, encoding="utf-8-sig", errors="replace") as fh:
                     starter_srcs.append(fh.read())
-        profile = build_starter_profile(starter_srcs, cfg)
+                if lang_of(sp) == "cpp":
+                    starter_lang = "cpp"
+        profile = build_starter_profile(starter_srcs, cfg, lang=starter_lang)
         for s in subs:
-            subtract_starter(s, profile)
+            if s.lang == starter_lang:
+                subtract_starter(s, profile)
 
     # batch-common damper: strip fingerprints present in >=30% of the batch
     damped = apply_batch_damper(subs, cfg)
