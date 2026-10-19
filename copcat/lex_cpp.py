@@ -43,24 +43,30 @@ _BLOCK_STAR_RE = re.compile(r"^\s*\*+\s?")
 _RAW_STR_RE = re.compile(r'R"([^"(]*)\(')
 
 _CODE_LIKE_CPP_RE = re.compile(
-    r"(?:"
-    r"[)\]]\s*;?\s*$"                       # call/block tails
-    r"|[;{}]\s*$"
-    r"|\b(?:for|if|else|while|do|switch|case|return|break|continue|"
-    r"cout|cin|cerr|throw|catch|goto)\b"
+    r"^(?:"
+    r".*[;{]\s*$"                           # statement / block opener
+    r"|\}.*$"                               # closing brace line
+    r"|(?:for|if|else|while|do|switch|case|catch)\s*\("
+    r"|(?:cout|cin|cerr)\b"
+    r"|\breturn\b"
     r"|\b(?:int|float|double|bool|char|void|auto|long|short|unsigned|"
-    r"signed|size_t|string|vector)\b"
-    r"|[A-Za-z_]\w*\s*=[^=]"
-    r"|\bstruct\b|\bclass\b|\bnamespace\b|\busing\b"
+    r"signed|size_t|string|vector|template|struct|class|namespace|using)\b"
+    r"|[A-Za-z_][\w\])>]*\s*=[^=]"          # assignment (not ==)
+    r"|#\s*include\b"
     r")")
 
 
 def cpp_code_like(text):
-    """Heuristic: does this comment text look like C++ code?"""
+    """Heuristic: does this comment text look like C++ code?
+
+    Start-anchored and punctuation-hungry on purpose: English prose that
+    merely CONTAINS the words 'for', 'if' or 'while' (e.g. a commented task
+    description: 'Ask the user for the number of runners.') must NOT count.
+    """
     s = text.strip()
     if not s:
         return False
-    return bool(_CODE_LIKE_CPP_RE.search(s))
+    return bool(_CODE_LIKE_CPP_RE.match(s))
 
 
 def strip_cpp_comment(line):

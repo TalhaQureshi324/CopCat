@@ -96,3 +96,70 @@ def test_normal_dossier_unchanged(tmp_path):
     assert "Evasion alignment" not in html
     m = re.search(r"\((\d+) of (\d+) lines identical\)", html)
     assert m and int(m.group(1)) > 0
+
+
+def test_commented_prose_next_to_live_match_is_not_evasion(tmp_path):
+    """Regression: a mostly-commented file whose comments are PROSE (a task
+    description) next to a strong live-code match must get the plain
+    live-vs-live dossier - never an 'Evasion alignment' section."""
+    prose = (
+        "// Ask the user for the number of runners.\n"
+        "// 1. Hours, minutes, and seconds if the margin is at least 1 hour.\n"
+        "// 2. Minutes and seconds if the margin is less than 1 hour.\n"
+        "// 3. Seconds only if the margin is less than 1 minute.\n"
+        "// The program uses arrays, while loops, and if-else statements\n"
+        "// to solve the problem and can work with different numbers of runners.\n"
+        "// Step 1: read how many runners took part in the race.\n"
+        "// Step 2: read the finish time of every runner one by one.\n"
+        "// Step 3: find the runner with the smallest finish time.\n"
+        "// Step 4: find the second smallest time among the remaining runners.\n"
+        "// Step 5: compute the margin between winner and runner-up.\n"
+        "// Step 6: print hours, minutes and seconds depending on the size\n"
+        "// of the margin, using while loops for the counting.\n"
+        "// The margin can also be printed only in seconds when it is small.\n"
+        "#include <iostream>\n"
+        "using namespace std;\n"
+        "int main() {\n"
+        '    cout << "done";\n'
+        "    return 0;\n"
+        "}\n")
+    live = (
+        "#include <iostream>\n"
+        "using namespace std;\n"
+        "int main() {\n"
+        "    int index;\n"
+        "    int RunnerTime[100];\n"
+        '    cout << "Enter number of runners";\n'
+        "    cin >> index;\n"
+        '    cout << "Enter Finish Times";\n'
+        "    for (int i = 0; i < index; i++) { cin >> RunnerTime[i]; }\n"
+        "    int WinnerTime = RunnerTime[0];\n"
+        "    for (int i = 1; i < index; i++) {\n"
+        "        if (RunnerTime[i] < WinnerTime) { WinnerTime = RunnerTime[i]; }\n"
+        "    }\n"
+        "    cout << WinnerTime << endl;\n"
+        "    return 0;\n"
+        "}\n")
+    cfg = AuditConfig()
+    prose_sub = build_submission("BSCS26094", "bscs26094_task3.cpp",
+                                 str(tmp_path / "p.cpp"), prose, cfg)
+    live_sub = build_submission("BSCS26020", "bscs26020_task3.cpp",
+                                str(tmp_path / "l.cpp"), live, cfg)
+    assert prose_sub.notes, "fixture must be mostly-commented"
+
+    pair = PairResult(
+        roll_a="BSCS26094", roll_b="BSCS26020",
+        file_a="bscs26094_task3.cpp", file_b="bscs26020_task3.cpp",
+        scores={"source": (0.71, None), "token": (0.56, 0.3),
+                "ast": (0.86, 0.5), "shadow": (0.0, 0.0),
+                "comment": (0.0, 0.0), "string": (1.0, 0.6)},
+        blended=0.862, flag="HIGH_PROBABILITY_PLAGIARISM", evasion=0.0)
+
+    out = tmp_path / "dossier.html"
+    write_dossier(out, prose_sub, live_sub, pair, cfg)
+    html = out.read_text(encoding="utf-8")
+    assert "Evasion alignment" not in html
+    assert "Side-by-side comparison" in html
+    assert "evasion signature" not in html
+
+

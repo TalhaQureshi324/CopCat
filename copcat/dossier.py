@@ -33,9 +33,15 @@ _PRINT_CSS = """
 """
 
 
-def _evasion_sides(sub_a, sub_b, cfg):
-    """For an evasion pair, return (hidden, live): the mostly-commented
-    submission and its live-code counterpart. None if this is not one."""
+def _evasion_sides(pair, sub_a, sub_b, cfg):
+    """For an EVASION-PROMOTED pair, return (hidden, live): the mostly-
+    commented submission and its live-code counterpart. None otherwise.
+
+    The gate is pair.evasion: a merely mostly-commented file is not enough
+    (a commented task DESCRIPTION next to live code must not be framed as
+    evasion - that dossier shows the plain live-vs-live comparison)."""
+    if not pair.evasion:
+        return None
     if sub_a.notes and len(sub_a.shadow_tokens) > len(sub_b.shadow_tokens):
         hidden, live = sub_a, sub_b
     elif sub_b.notes and len(sub_b.shadow_tokens) > len(sub_a.shadow_tokens):
@@ -129,7 +135,7 @@ def write_dossier(path, sub_a, sub_b, pair, cfg, lab="the assignment"):
     # both sides normalized the same way so lines can actually match. A
     # live-vs-live diff of an evasion pair is near-zero by construction and
     # would contradict the verdict visually.
-    evasion = _evasion_sides(sub_a, sub_b, cfg)
+    evasion = _evasion_sides(pair, sub_a, sub_b, cfg)
     if evasion:
         hidden, live = evasion
         rows_html, eq, tot, truncated = _diff_rows(
